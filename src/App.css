@@ -1,32 +1,110 @@
-.App {
-  text-align: center;
+#app {
+    font-family: "fira sans";
+    display: grid;
+    grid-template-rows: auto auto;
+    grid-template-columns: 20em auto;
+    grid-template-areas: "header header"
+                         "sidebar main";
 }
 
-.App-logo {
-  animation: App-logo-spin infinite 20s linear;
-  height: 40vmin;
+header {
+    grid-area: header;
+    background-color: #222;
+    color: white;
+    padding-left: 1em;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+section#selector {
+    padding-left: 1em;
+    grid-area: sidebar;
 }
 
-.App-link {
-  color: #61dafb;
+section#details {
+    grid-area: main;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+ul {
+    display: block;
+    list-style: none;
+    padding-left: 0;
+}
+
+ul#test-paths {
+    font-family: "fira mono";
+    font-size: 80%;
+}
+
+ol.tab-strip {
+    display: flex;
+    list-style: none;
+    padding-left: 1em;
+    border-bottom: 1px solid grey;
+}
+
+ol.tab-strip > li {
+    border: 1px solid grey;
+    border-bottom: none;
+    margin-bottom: -1px;
+    padding-left: 1em;
+    padding-right: 1em;
+}
+
+ol.tab-strip > li.tab-active {
+    border-bottom: 1px solid white;
+    border-top: 2px solid orange;
+}
+
+.tree-row > .tree-row {
+    margin-left: 2em;
+}
+
+.tree-row-expanded {
+    margin-bottom: 1em;
+}
+
+table.results {
+    border-collapse: collapse;
+}
+
+table.results > thead th {
+    text-transform: capitalize;
+    min-width: 10em;
+    text-align: center;
+}
+
+table.results > tbody th {
+    font-weight: normal;
+    font-family: "fira mono";
+    padding-right: 1em;
+}
+
+td.result {
+    text-transform: uppercase;
+    color: white;
+    background-color: orange;
+    text-align: center;
+}
+
+td.result-pass {
+    background-color: green;
+}
+
+td.result-ok {
+    background-color: green;
+}
+
+td.result-fail {
+    background-color: red;
+}
+
+td.result-error {
+    background-color: blue;
+}
+
+td.result-crash {
+    background-color: black;
+}
+
+td.result-notrun {
+    background-color: grey;
 }

@@ -4,7 +4,7 @@ import './App.css';
 const BUGZILLA_TASK_URL = "https://index.taskcluster.net/v1/task/gecko.v2.mozilla-central.latest.source.source-bugzilla-info";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
 
-const WPT_FYI_BASE = "http://flitwick:8010/proxy/api";
+const WPT_FYI_BASE = "http://flitwick:8010/proxy";
 
 const passStatuses = new Set(["PASS", "OK"]);
 
@@ -107,7 +107,7 @@ class App extends Component {
     }
 
     async loadWptRunData() {
-        let runsUrl = makeWptFyiUrl("runs", {aligned: ""});
+        let runsUrl = makeWptFyiUrl("api/runs", {aligned: ""});
         let runsResp = await fetch(runsUrl);
 
         let runsJson = await runsResp.json();
@@ -315,7 +315,7 @@ class ResultsView extends Component {
     async fetchResults() {
         let searchQuery = this.buildQuery();
 
-        let searchResp = await fetch(makeWptFyiUrl("search", {}), {
+        let searchResp = await fetch(makeWptFyiUrl("api/search", {}), {
             method: "POST",
             body: JSON.stringify(searchQuery),
             headers:{

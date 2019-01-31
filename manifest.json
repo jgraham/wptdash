@@ -1,0 +1,14 @@
+{
+  "short_name": "wptdash",
+  "name": "wpt interop dashboard",
+  "icons": [
+    {
+      "src": "wpt-logo-darkblue.svg",
+      "type": "image/svg"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

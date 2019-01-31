@@ -4,7 +4,7 @@ import './App.css';
 const BUGZILLA_TASK_URL = "https://index.taskcluster.net/v1/task/gecko.v2.mozilla-central.latest.source.source-bugzilla-info";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
 
-const WPT_FYI_BASE = "http://flitwick:8010/proxy";
+const WPT_FYI_BASE = process.env.REACT_APP_WPT_FYI;
 
 const passStatuses = new Set(["PASS", "OK"]);
 

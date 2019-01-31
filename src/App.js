@@ -29,17 +29,16 @@ function arraysEqual(a, b) {
     return a.every((a_value, i) => a_value === b[i]);
 }
 
-function getUrlParams() {
-    return new URL(window.location).searchParams;
-}
-
-function setUrlParams(items) {
-    let url = new URL(window.location);
-    let params = url.searchParams;
-    for (let key of Object.keys(items)) {
-        params.set(key, items[key]);
+function setsEqual(a, b) {
+    if (a.size !== b.size) {
+        return false;
     }
-    window.history.replaceState({}, document.title, url.href);
+    for(let elem of a) {
+        if (!b.has(elem)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function makeWptFyiUrl(path, params={}) {
@@ -62,13 +61,50 @@ function makeWptFyiUrl(path, params={}) {
     return url;
 }
 
+class UrlParams {
+    constructor() {
+        this.url = new URL(window.location)
+        this.params = this.url.searchParams;
+    }
+
+    _update() {
+        window.history.replaceState({}, document.title, this.url.href);
+    }
+
+    get(name) {
+        return this.params.get(name);
+    }
+
+    has(name) {
+        return this.params.has(name);
+    }
+
+    set(name, value) {
+        this.params.set(name, value);
+        this._update();
+    }
+
+    delete(name) {
+        this.params.delete(name);
+        this._update();
+    }
+
+    append(name, value) {
+        this.params.append(name, value);
+        this._update();
+    }
+}
+
+const urlParams = new UrlParams();
+
 class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
             bugComponents: [],
             bugComponentsMap: new Map(),
-            currentBugComponent: getUrlParams().get("bugComponent"),
+            currentBugComponent: null,
+            selectedPaths: new Set(),
             wptRuns: null
         };
     }
@@ -101,9 +137,26 @@ class App extends Component {
             "bugComponents": components
         });
 
-        if (!this.state.currentBugComponent || !componentsMap.has(this.state.currentBugComponent)) {
-            this.setState({currentBugComponent: components[0]});
+        //TODO set paths from URL
+
+        let currentBugComponent = this.state.currentBugComponent;
+
+        if (!currentBugComponent && urlParams.has("bugComponent")) {
+            let bugComponent = urlParams.get("bugComponent");
+            if (componentsMap.has(bugComponent)) {
+                currentBugComponent = bugComponent;
+            }
         }
+        if (!currentBugComponent) {
+            currentBugComponent = components[0].toLowerCase();
+        }
+
+        let selectedPaths = new Set(componentsMap.get(currentBugComponent));
+        if (urlParams.has("paths")) {
+            let urlPaths = new Set(urlParams.get("paths").split(","));
+            selectedPaths = new Set(Array.from(selectedPaths).filter(x => urlPaths.has(x)));
+        }
+        this.setState({selectedPaths, currentBugComponent});
     }
 
     async loadWptRunData() {
@@ -169,11 +222,26 @@ class App extends Component {
     }
 
     onComponentChange = (component) => {
-        this.setState({currentBugComponent: component.toLowerCase()});
-        setUrlParams({"bugComponent": component.toLowerCase()});
+        let canonicalComponent = component.toLowerCase();
+        let selectedPaths = new Set(this.state.bugComponentsMap.get(canonicalComponent));
+        urlParams.set("bugComponent", component);
+        urlParams.delete("paths");
+        this.setState({currentBugComponent: canonicalComponent, selectedPaths});
+    }
+
+    onPathsChange = (selectedPaths) => {
+        let pathsArray = Array.from(selectedPaths);
+        pathsArray.sort();
+        if (!arraysEqual(pathsArray, this.state.bugComponentsMap.get(this.state.currentBugComponent))) {
+            urlParams.set("paths", pathsArray.join(","));
+        } else {
+            urlParams.delete("paths");
+        }
+        this.setState({selectedPaths});
     }
 
     render() {
+        let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
         return (
             <div id="app">
               <header>
@@ -184,7 +252,10 @@ class App extends Component {
                 <BugComponentSelector onComponentChange={this.onComponentChange}
                                       components={this.state.bugComponents}
                                       value={this.state.currentBugComponent} />
-                <TestPaths paths={this.state.bugComponentsMap.get(this.state.currentBugComponent)}/>
+                <TestPaths
+                  paths={paths}
+                  selectedPaths={this.state.selectedPaths}
+                  onChange={this.onPathsChange} />
               </section>
               <section id="details">
                 <Tabs>
@@ -192,7 +263,7 @@ class App extends Component {
                                failsIn={["firefox"]}
                                passesIn={["safari", "chrome"]}
                                runs={this.state.wptRuns}
-                               paths={this.state.bugComponentsMap.get(this.state.currentBugComponent)}>
+                               paths={Array.from(this.state.selectedPaths)}>
                     <h2>Firefox-only Failures</h2>
                     <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
                   </ResultsView>
@@ -200,7 +271,7 @@ class App extends Component {
                                failsIn={["firefox"]}
                                passesIn={[]}
                                runs={this.state.wptRuns}
-                               paths={this.state.bugComponentsMap.get(this.state.currentBugComponent)}>
+                               paths={Array.from(this.state.selectedPaths)}>
                     <h2>All Firefox Failures</h2>
                     <p>Tests that fail in Firefox</p>
                   </ResultsView>
@@ -238,7 +309,9 @@ class BugComponentSelector extends Component {
         }
         return (<section>
                   <label>Bug Component: </label>
-                  <select onChange={this.handleChange} value={this.props.value}>
+                  <select
+                    onChange={this.handleChange}
+                    value={this.props.value}>
                     {selectItems}
                   </select>
                 </section>
@@ -247,15 +320,78 @@ class BugComponentSelector extends Component {
 }
 
 class TestPaths extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            paths: new Set(this.props.paths)
+        };
+    }
+
+    onCheckboxChange = (path, checked) => {
+        let paths = new Set(this.state.paths);
+        if (checked) {
+            paths.add(path);
+        } else {
+            paths.delete(path);
+        }
+        this.setState({paths});
+    }
+
+    onUpdateClick = () => {
+        this.props.onChange(this.state.paths);
+    }
+
+    componentDidUpdate(prevProps) {
+        if (prevProps.selectedPaths !== this.props.selectedPaths) {
+            this.setState({paths: new Set(this.props.selectedPaths)});
+        }
+    }
+
     render() {
-        let paths = this.props.paths || [];
-        let listItems = paths.sort().map(path => <li key={path}>{path}</li>);
+        if (!this.props.paths) {
+            return null;
+        }
+        let listItems = this.props.paths.sort().map(path => (
+            <li key={path}>
+              <Checkbox
+                checked={this.props.selectedPaths.has(path)}
+                value={path}
+                onCheckboxChange={this.onCheckboxChange} />
+              {path}
+            </li>));
         return (<section>
                   <h2>Test Paths</h2>
+                  <button
+                    onClick={this.onUpdateClick}
+                    disabled={setsEqual(this.state.paths, this.props.selectedPaths)}>
+                    Update
+                  </button>
                   <ul id="test-paths">
                     {listItems}
                   </ul>
                 </section>);
+    }
+}
+
+class Checkbox extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            checked: this.props.checked
+        };
+    }
+
+    handleChange = (event) => {
+        this.setState({checked: event.target.checked ? true : false});
+        this.props.onCheckboxChange(this.props.value, event.target.checked);
+    }
+
+    render() {
+        return (<input
+                  name={this.props.path}
+                  type="checkbox"
+                  checked={this.state.checked}
+                  onChange={this.handleChange} />);
     }
 }
 
@@ -369,7 +505,7 @@ class ResultsView extends Component {
     }
 
     async fetchIfPossible(prevProps) {
-        if (this.runs === null) {
+        if (this.props.runs === null) {
             return;
         }
         if (!this.props.paths) {
@@ -381,9 +517,13 @@ class ResultsView extends Component {
             arraysEqual(this.props.passesIn, prevProps.passesIn)) {
             return;
         }
+        if (!this.props.paths.length) {
+            this.setState({results: {results: []},
+                           loaded: true});
+            return;
+        }
         let results = await this.fetchResults();
-        this.setState({results: results,
-                       loaded: true});
+        this.setState({results, loaded: true});
     }
 }
 
@@ -545,13 +685,13 @@ class Tabs extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            activeTab: getUrlParams().get('tab') || this.props.children[0].props.label
+            activeTab: urlParams.get('tab') || this.props.children[0].props.label
         };
     }
 
     handleClickTab = (label) => {
         this.setState({activeTab: label});
-        setUrlParams({'tab': label});
+        urlParams.set('tab', label);
     }
 
     render() {

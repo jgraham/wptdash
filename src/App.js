@@ -137,6 +137,7 @@ class App extends Component {
 
         let [components, componentsMap] = this.processComponentData(componentData);
         components = Array.from(components).sort();
+        components.push("Any");
 
         this.setState({
             "bugComponentsMap": componentsMap,
@@ -230,6 +231,9 @@ class App extends Component {
         let stack = [[wptRoot, paths.testing["web-platform"].tests]];
         let pathTrimRe = /(.*)\/[^/]*$/;
         let components = [];
+
+        componentToPath.set("any", []);
+
         while (stack.length) {
             let [basePath, obj] = stack.pop();
             let found = false;
@@ -258,7 +262,9 @@ class App extends Component {
                             componentToPath.set(canonicalComponent, []);
                             components.push(component);
                         };
-                        componentToPath.get(canonicalComponent).push(basePath.slice(wptRoot.length));
+                        let relPath = basePath.slice(wptRoot.length);
+                        componentToPath.get(canonicalComponent).push(relPath);
+                        componentToPath.get("any").push(relPath);
                         found = true;
                     }
                 }

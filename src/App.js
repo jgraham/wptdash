@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import './App.css';
 
-const BUGZILLA_TASK_URL = "https://index.taskcluster.net/v1/task/gecko.v2.mozilla-central.latest.source.source-bugzilla-info";
+const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
 
 const WPT_FYI_BASE = "https://staging.wpt.fyi";
@@ -105,13 +105,13 @@ class App extends Component {
             bugComponentsMap: new Map(),
             currentBugComponent: null,
             selectedPaths: new Set(),
-            wptRuns: null
+            wptRuns: null,
+            geckoMetadata: {}
         };
     }
 
-    async loadBugComponentData() {
-        // TODO - Error handling
-        let taskResp = await fetch(BUGZILLA_TASK_URL);
+    async loadTaskClusterData(indexName, artifactName) {
+        let taskResp = await fetch(`${TASK_INDEX_BASE}/${indexName}`);
         let taskData = await taskResp.json();
         let taskId = taskData.taskId;
         let taskStatusResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/status`);
@@ -125,9 +125,15 @@ class App extends Component {
         }
         let artifactsResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts`);
         let artifacts = await artifactsResp.json();
-        let artifactData = artifacts.artifacts.find(artifact => artifact.name.endsWith("components-normalized.json"));
+        let artifactData = artifacts.artifacts.find(artifact => artifact.name.endsWith(artifactName));
         let artifactResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts/${artifactData.name}`);
-        let componentData = await artifactResp.json();
+        return artifactResp.json();
+    }
+
+    async loadBugComponentData() {
+        // TODO - Error handling
+        let componentData = await this.loadTaskClusterData("gecko.v2.mozilla-central.latest.source.source-bugzilla-info",
+                                                           "components-normalized.json");
 
         let [components, componentsMap] = this.processComponentData(componentData);
         components = Array.from(components).sort();
@@ -168,11 +174,51 @@ class App extends Component {
         this.setState({wptRuns: runsJson});
     }
 
+    async loadGeckoMetadata() {
+//        let metadata = await this.loadTaskClusterData("index.gecko.v2.try.latest.source.source-wpt-metadata-summary",
+//                                                      "summary.json");
+        let dataResp = await fetch(`https://queue.taskcluster.net/v1/task/eaGx0TqWSEiGoSBS_1YDcw/runs/0/artifacts/public/summary.json`,
+                                  {redirect: "follow"});
+        let metadata = await dataResp.json();
+        this.setState({geckoMetadata: metadata});
+    }
+
     async componentDidMount() {
         let bugComponentPromise = this.loadBugComponentData();
         let wptRunDataPromise = this.loadWptRunData();
+        let geckoMetadataPromise = this.loadGeckoMetadata();
 
-        await Promise.all([bugComponentPromise, wptRunDataPromise]);
+        await Promise.all([bugComponentPromise, wptRunDataPromise, geckoMetadataPromise]);
+    }
+
+    filterGeckoMetadata() {
+        if (!this.state.selectedPaths.size || !Object.keys(this.state.geckoMetadata).length) {
+            return null;
+        }
+        function makeRe(pathPrefixes) {
+            if (!pathPrefixes.length) {
+                return null;
+            }
+            return new RegExp(`^(?:${pathPrefixes.join("|")})(?:$|/)`);
+        }
+        let pathRe = makeRe(Array.from(this.state.selectedPaths).map(x => x.slice(1)));
+
+        let notPaths = [];
+        for (let path of this.state.bugComponentsMap.values()) {
+            if (!this.state.selectedPaths.has(path) &&
+                pathRe.test(path.slice(1))) {
+                notPaths.push(path);
+            }
+        }
+        let notPathRe = makeRe(notPaths);
+        let data = {};
+        let allMetadata = this.state.geckoMetadata;
+        for (let key of Object.keys(allMetadata)) {
+            if (pathRe.test(key) && (notPathRe === null || !notPathRe.test(key))) {
+                data[key] = allMetadata[key];
+            }
+        }
+        return data;
     }
 
     processComponentData(componentData) {
@@ -275,6 +321,12 @@ class App extends Component {
                     <h2>All Firefox Failures</h2>
                     <p>Tests that fail in Firefox</p>
                   </ResultsView>
+                <GeckoData label="Gecko Data"
+                           data={this.filterGeckoMetadata()}
+                           paths={Array.from(this.state.selectedPaths)}>
+                  <h2>Gecko metadata</h2>
+                  <p>Gecko metadata in <code>testing/web-platform/meta</code></p>
+                </GeckoData>
                 </Tabs>
               </section>
             </div>
@@ -492,6 +544,10 @@ class ResultsView extends Component {
         testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
+                  <p>{this.state.results.results.length} top-level tests with
+                    &nbsp;{this.state.results.results
+                     .map(x => x.legacy_status[0].total)
+                     .reduce((x,y) => x+y, 0)} subtests</p>
                   <ul>{testItems}</ul>
                 </div>);
     }
@@ -592,6 +648,15 @@ class TestDetails extends Component {
             }
         }
 
+        for (let resultByBrowser of resultBySubtest.values()) {
+            for (let browser of results.keys()) {
+                if (!resultByBrowser.has(browser)) {
+                    resultByBrowser.set(browser, {status: "MISSING",
+                                                  message: null});
+                }
+            }
+        }
+
         let filteredResultBySubtest = new Map();
         // Filter out subtest results that don't match the current filters
         for (let [subtest, resultByBrowser] of resultBySubtest) {
@@ -680,6 +745,170 @@ class ResultCell extends Component {
                 </td>);
     }
 }
+
+class GeckoData extends Component {
+    groupData() {
+        let disabled = new Map();
+        let lsan = new Map();
+        let crashes = new Map();
+
+        for (let [dir, dirData] of Object.entries(this.props.data)) {
+            if (dirData.disabled) {
+                disabled.set(dir, dirData.disabled);
+            }
+            if (dirData['lsan-allowed']) {
+                lsan.set(dir, dirData['lsanAllowed']);
+            }
+            if (dirData.expected_CRASH) {
+                crashes.set(dir, dirData.expected_CRASH.map(cond => [cond, null]));
+            }
+            if (!dirData._tests) {
+                continue;
+            }
+            for (let [test, testData] of Object.entries(dirData._tests)) {
+                let testKey = `${dir}/${test}`;
+                if (testData.disabled) {
+                    disabled.set(testKey, testData.disabled);
+                }
+                if (testData.expected_CRASH) {
+                    crashes.set(testKey, testData.expected_CRASH.map(cond => [cond, null]));
+                }
+                if (!testData._subtests) {
+                    continue;
+                }
+                for (let [subtest, subtestData] of Object.entries(testData._subtests)) {
+                    let subtestKey = `${dir}/${test} | ${subtest}`;
+                    if (subtestData.disabled) {
+                        disabled.set(subtestKey, subtestData.disabled);
+                    }
+                    if (subtestData.expected_CRASH) {
+                        crashes.set(subtestKey, subtestData.expected_CRASH.map(cond => [cond, null]));
+                    }
+                }
+            }
+        }
+        return {disabled, lsan, crashes};
+    }
+
+    render() {
+        console.log(this.props.data);
+        let content;
+        if (this.props.data === null) {
+            content = <p>Loading</p>;
+        } else {
+            content = [];
+            let byType = this.groupData();
+            console.log(byType);
+            if (byType.crashes) {
+                let items = [];
+                for (let [test, values] of byType.crashes) {
+                    items.push(<GeckoMetadataLine
+                                 key={test}
+                                 test={test}
+                                 values={values}
+                                 render={value => null}/>);
+                }
+                if (items.length) {
+                    content.push(<section key="crashes">
+                                   <h2>Crashes</h2>
+                                   <p>{items.length} tests crash in some configurations</p>
+                                   <ul>{items}</ul>
+                                 </section>);
+                }
+            }
+            if (byType.disabled) {
+                let items = [];
+                for (let [test, values] of byType.disabled) {
+                    items.push(<GeckoMetadataLine
+                                 key={test}
+                                 test={test}
+                                 values={values}
+                                 render={value => <MaybeBugLink value={value} />}/>);
+                }
+                if (items.length) {
+                    content.push(<section key="disabled">
+                                   <h2>Disabled</h2>
+                                   <p>{items.length} tests are disabled in some configurations</p>
+                                   <ul>{items}</ul>
+                                 </section>);
+                }
+            }
+            if (byType.lsan) {
+                let items = [];
+                for (let [test, values] of byType.lsan) {
+                    items.push(<GeckoMetadataLine
+                                 key={test}
+                                 test={test}
+                                 values={values}
+                                 render={value => <LsanListValue value={value}/>} />);
+                }
+                if (items.length) {
+                    content.push(<section key="lsan">
+                                   <h2>LSAN Failures</h2>
+                                   <p>{items.length} directories have LSAN failures</p>
+                                   <ul>{items}</ul>
+                                 </section>);
+                }
+            }
+            return (<section>
+                      {this.props.children}
+                      {content.length ? content : <p>No metadata available</p>}
+                    </section>);
+        }
+        return (<section>
+                  <h2>Gecko metadata</h2>
+                  <p>None</p>
+                </section>);
+    }
+}
+
+class GeckoMetadataLine extends Component {
+    render() {
+        let values = [];
+        for (let [condition, value] of this.props.values) {
+            let conditionStr = condition ? `if ${condition}${value ? ": " : " "}` : "";
+            values.push(<li
+                          key={condition ? condition : "None"}
+                          className="tree-row">
+                          {conditionStr}{value ? this.props.render(value): null}
+                        </li>);
+        }
+        let valueList = null;
+        if (values.length) {
+            valueList = <ul className="tree-row">{values}</ul>;
+        }
+        return (<li
+                  key={this.props.test}>
+                  {this.props.test}
+                  {valueList}
+                </li>);
+    }
+}
+
+class MaybeBugLink extends Component {
+    render() {
+        const bugLinkRe = /https?:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=(\d+)/;
+        const bugNumberRe = /(?:bug\s+)?(\d+)/i;
+        for (let re of [bugLinkRe, bugNumberRe]) {
+            let match = re.exec(this.props.value);
+            if (match !== null) {
+                return <a href={`https://bugzilla.mozilla.org/show_bug.cgi?id=${match[1]}`}>Bug {match[1]}</a>;
+            }
+        }
+        return this.props.value;
+    }
+}
+
+class LsanListValue extends Component {
+    render() {
+        if (Array.isArray(this.props.value)) {
+            let frames = this.props.value.map(x => <li key={x}>x</li>);
+            return (<ul>{frames}</ul>);
+        }
+        return this.props.value;
+    }
+}
+
 
 class Tabs extends Component {
     constructor(props) {

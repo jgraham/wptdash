@@ -41,6 +41,14 @@ function setsEqual(a, b) {
     return true;
 }
 
+function* iterMapSorted(map, cmp) {
+    let keys = Array.from(map.keys());
+    keys.sort();
+    for (let key of keys) {
+        yield [key, map.get(key)];
+    }
+}
+
 function makeWptFyiUrl(path, params={}) {
     let url = new URL(`${WPT_FYI_BASE}/${path}`);
     let defaults = [["label", "master"],
@@ -178,7 +186,7 @@ class App extends Component {
     async loadGeckoMetadata() {
 //        let metadata = await this.loadTaskClusterData("index.gecko.v2.try.latest.source.source-wpt-metadata-summary",
 //                                                      "summary.json");
-        let dataResp = await fetch(`https://queue.taskcluster.net/v1/task/eaGx0TqWSEiGoSBS_1YDcw/runs/0/artifacts/public/summary.json`,
+        let dataResp = await fetch(`https://queue.taskcluster.net/v1/task/Ik2tnR1KQzi26GfvTQ2WHw/runs/0/artifacts/public/summary.json`,
                                   {redirect: "follow"});
         let metadata = await dataResp.json();
         this.setState({geckoMetadata: metadata});
@@ -331,7 +339,8 @@ class App extends Component {
                            data={this.filterGeckoMetadata()}
                            paths={Array.from(this.state.selectedPaths)}>
                   <h2>Gecko metadata</h2>
-                  <p>Gecko metadata in <code>testing/web-platform/meta</code></p>
+                  <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
+                  <p>Note: this data is currently not kept up to date</p>
                 </GeckoData>
                 </Tabs>
               </section>
@@ -589,7 +598,7 @@ class ResultsView extends Component {
     }
 }
 
-class TestItem extends Component {
+class TreeRow extends Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -602,28 +611,39 @@ class TestItem extends Component {
     }
 
     render() {
+        return (<li className={"tree-row" + (this.state.showDetails ? " tree-row-expanded" : "")}>
+                  <span onClick={this.handleClick}>
+                    {this.state.showDetails ? "\u25BC" : "\u25B6"}
+                    {this.props.rowTitle}
+                  </span>
+                  {this.props.rowExtra}
+                  {this.state.showDetails ? (<div className="tree-row">
+                                               {this.props.children}
+                                             </div>) : ""}
+               </li>);
+    }
+
+}
+
+class TestItem extends Component {
+    render() {
         // TODO: Difference between test path and file path
         let testUrl = `http://w3c-test.org${this.props.result.test}`;
         let resultUrl = makeWptFyiUrl(`results/${this.props.result.test}`);
         let metaUrl = `http://searchfox.org/mozilla-central/source/testing/web-platform/meta${this.props.result.test}.ini`;
+        let rowExtra = (<span>
+                         [<a href={testUrl}>test</a>]
+                         [<a href={resultUrl}>{this.props.result.legacy_status[0].total} subtests</a>]
+                         [<a href={metaUrl}>gecko metadata</a>]</span>);
         return (
-            <li className={"tree-row" + (this.state.showDetails ? " tree-row-expanded" : "")}>
-              <span onClick={this.handleClick}>
-                {this.state.showDetails ? "\u25BC" : "\u25B6"}
-                <code>{this.props.result.test}</code>
-              </span>
-              [<a href={testUrl}>test</a>]
-              [<a href={resultUrl}>{this.props.result.legacy_status[0].total} subtests</a>]
-              [<a href={metaUrl}>gecko metadata</a>]
-              {this.state.showDetails ? (<div className="tree-row">
-                                           <TestDetails
-                                             runs={this.props.runs}
-                                             visible={this.state.showDetails}
-                                             test={this.props.result.test}
-                                             passesIn={this.props.passesIn}
-                                             failsIn={this.props.failsIn}/>
-                                         </div>) : ""}
-            </li>
+                <TreeRow rowTitle={<code>{this.props.result.test}</code>}
+                  rowExtra={rowExtra}>
+                  <TestDetails
+                    runs={this.props.runs}
+                    test={this.props.result.test}
+                    passesIn={this.props.passesIn}
+                    failsIn={this.props.failsIn}/>
+            </TreeRow>
         );
     }
 }
@@ -702,9 +722,6 @@ class TestDetails extends Component {
     }
 
     render() {
-        if (!this.props.visible) {
-            return null;
-        }
         if (!this.state.loaded) {
             return <p>Loading</p>;
         }
@@ -763,7 +780,7 @@ class GeckoData extends Component {
                 disabled.set(dir, dirData.disabled);
             }
             if (dirData['lsan-allowed']) {
-                lsan.set(dir, dirData['lsanAllowed']);
+                lsan.set(dir, dirData['lsan-allowed']);
             }
             if (dirData.expected_CRASH) {
                 crashes.set(dir, dirData.expected_CRASH.map(cond => [cond, null]));
@@ -807,7 +824,7 @@ class GeckoData extends Component {
             console.log(byType);
             if (byType.crashes) {
                 let items = [];
-                for (let [test, values] of byType.crashes) {
+                for (let [test, values] of iterMapSorted(byType.crashes)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
                                  test={test}
@@ -824,7 +841,7 @@ class GeckoData extends Component {
             }
             if (byType.disabled) {
                 let items = [];
-                for (let [test, values] of byType.disabled) {
+                for (let [test, values] of iterMapSorted(byType.disabled)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
                                  test={test}
@@ -841,7 +858,7 @@ class GeckoData extends Component {
             }
             if (byType.lsan) {
                 let items = [];
-                for (let [test, values] of byType.lsan) {
+                for (let [test, values] of iterMapSorted(byType.lsan)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
                                  test={test}
@@ -874,20 +891,19 @@ class GeckoMetadataLine extends Component {
         for (let [condition, value] of this.props.values) {
             let conditionStr = condition ? `if ${condition}${value ? ": " : " "}` : "";
             values.push(<li
-                          key={condition ? condition : "None"}
-                          className="tree-row">
-                          {conditionStr}{value ? this.props.render(value): null}
+                          key={condition ? condition : "None"}>
+                          <code>{conditionStr}</code>{value ? this.props.render(value): null}
                         </li>);
         }
         let valueList = null;
         if (values.length) {
             valueList = <ul className="tree-row">{values}</ul>;
         }
-        return (<li
-                  key={this.props.test}>
-                  {this.props.test}
+        return (<TreeRow
+                  rowTitle={this.props.test}
+                  rowExtra={null}>
                   {valueList}
-                </li>);
+                </TreeRow>);
     }
 }
 
@@ -908,7 +924,7 @@ class MaybeBugLink extends Component {
 class LsanListValue extends Component {
     render() {
         if (Array.isArray(this.props.value)) {
-            let frames = this.props.value.map(x => <li key={x}>x</li>);
+            let frames = this.props.value.map(x => <li key={x}><code>{x}</code></li>);
             return (<ul>{frames}</ul>);
         }
         return this.props.value;

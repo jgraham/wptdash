@@ -114,7 +114,8 @@ class App extends Component {
             currentBugComponent: null,
             selectedPaths: new Set(),
             wptRuns: null,
-            geckoMetadata: {}
+            geckoMetadata: {},
+            geckoMetadataForPaths: {},
         };
     }
 
@@ -202,7 +203,7 @@ class App extends Component {
 
     filterGeckoMetadata() {
         if (!this.state.selectedPaths.size || !Object.keys(this.state.geckoMetadata).length) {
-            return null;
+            return;
         }
         function makeRe(pathPrefixes) {
             if (!pathPrefixes.length) {
@@ -227,7 +228,8 @@ class App extends Component {
                 data[key] = allMetadata[key];
             }
         }
-        return data;
+
+        this.setState({pathMetadata: data});
     }
 
     processComponentData(componentData) {
@@ -300,6 +302,13 @@ class App extends Component {
         this.setState({selectedPaths});
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        if (prevState.geckoMetadata !== this.state.geckoMetadata ||
+            !arraysEqual(prevState.selectedPaths, this.state.selectedPaths)) {
+            this.filterGeckoMetadata();
+        }
+    }
+
     render() {
         let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
         return (
@@ -323,7 +332,8 @@ class App extends Component {
                                failsIn={["firefox"]}
                                passesIn={["safari", "chrome"]}
                                runs={this.state.wptRuns}
-                               paths={Array.from(this.state.selectedPaths)}>
+                               paths={Array.from(this.state.selectedPaths)}
+                               geckoMetadata={this.state.pathMetadata}>
                     <h2>Firefox-only Failures</h2>
                     <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
                   </ResultsView>
@@ -331,12 +341,13 @@ class App extends Component {
                                failsIn={["firefox"]}
                                passesIn={[]}
                                runs={this.state.wptRuns}
-                               paths={Array.from(this.state.selectedPaths)}>
+                               paths={Array.from(this.state.selectedPaths)}
+                               geckoMetadata={this.state.pathMetadata}>
                     <h2>All Firefox Failures</h2>
                     <p>Tests that fail in Firefox</p>
                   </ResultsView>
                 <GeckoData label="Gecko Data"
-                           data={this.filterGeckoMetadata()}
+                           data={this.state.pathMetadata}
                            paths={Array.from(this.state.selectedPaths)}>
                   <h2>Gecko metadata</h2>
                   <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
@@ -531,6 +542,46 @@ class ResultsView extends Component {
 
     }
 
+    getMetadata(test) {
+        let metadata = new Map();
+        let dirParts = test.split("/");
+        let testName = dirParts[dirParts.length - 1];
+        dirParts = dirParts.slice(1, dirParts.length - 1);
+        let dirPath = "";
+
+        function copyMeta(src) {
+            for (let [key, value] of Object.entries(src)) {
+                if (key[0] !== "_") {
+                    metadata.set(key, value);
+                }
+            }
+        }
+
+        for (let part of dirParts) {
+            if (dirPath.length) {
+                dirPath += "/";
+            }
+            dirPath += part;
+            let dirMeta = this.props.geckoMetadata[dirPath];
+            if (dirMeta) {
+                copyMeta(dirMeta);
+            }
+        }
+
+        let dirMetadata = this.props.geckoMetadata[dirPath];
+        if (dirMetadata && dirMetadata._tests && dirMetadata._tests[testName]) {
+            let testMetadata = dirMetadata._tests[testName];
+            copyMeta(testMetadata);
+            if (testMetadata._subtests) {
+                metadata._subtests = new Map();
+                for (let [key, value] of Object.entries(testMetadata._subtests)) {
+                    metadata._subtests.set(key, new Map(Object.entries(value)));
+                }
+            }
+        }
+        return metadata;
+    }
+
     render() {
         if (!this.props.runs || !this.state.loaded) {
             return (<div>
@@ -555,7 +606,9 @@ class ResultsView extends Component {
                                                                   passesIn={this.props.passesIn}
                                                                   runs={this.props.runs}
                                                                   result={result}
-                                                                  key={result.test}/>));
+                                                                  key={result.test}
+                                                                  geckoMetadata={this.getMetadata(result.test)}
+/>));
         testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
@@ -642,7 +695,8 @@ class TestItem extends Component {
                     runs={this.props.runs}
                     test={this.props.result.test}
                     passesIn={this.props.passesIn}
-                    failsIn={this.props.failsIn}/>
+                    failsIn={this.props.failsIn}
+                    geckoMetadata={this.props.geckoMetadata} />
             </TreeRow>
         );
     }
@@ -726,12 +780,17 @@ class TestDetails extends Component {
             return <p>Loading</p>;
         }
         let headerRow = this.props.runs.map(run => <th key={run.browser_name}>{run.browser_name}</th>);
+        headerRow.push(<th key="metadata"></th>);
+        let subtestMetadata = this.props.geckoMetadata.get("_subtests") || new Map();
         let resultRows = this.state.results.map(([subtest, results]) => (<ResultRow
                                                                            key={subtest}
                                                                            runs={this.props.runs}
                                                                            subtest={subtest}
-                                                                           results={results}/>));
-        return (<table className="results">
+                                                                           results={results}
+                                                                           geckoMetadata={subtestMetadata.get(subtest)} />));
+        return (<div>
+                  <MetaSummary data={this.props.geckoMetadata} />
+                  <table className="results">
                   <thead>
                     <tr>
                       <th></th>
@@ -741,7 +800,33 @@ class TestDetails extends Component {
                   <tbody>
                     {resultRows}
                   </tbody>
-                </table>);
+                </table>
+               </div>);
+    }
+}
+
+class MetaSummary extends Component {
+    render() {
+        if (!this.props.data) {
+            return null;
+        }
+        let items = [];
+        if (this.props.data.has("disabled")) {
+            items.push(<p key="disabled">Disabled in (some) gecko configurations</p>);
+        }
+        if (this.props.data.has("bug")) {
+            let bugValue = this.props.data.get("bug");
+            let unconditionalValue;
+            for (let [cond, value] of bugValue) {
+                if (cond === null) {
+                    unconditionalValue = value;
+                }
+            }
+            if (unconditionalValue) {
+                items.push(<MaybeBugLink key="bug" value={unconditionalValue}/>);
+            }
+        }
+        return items;
     }
 }
 
@@ -752,6 +837,9 @@ class ResultRow extends Component {
             let result = this.props.results.get(run.browser_name);
             return <ResultCell result={result} key={run.browser_name}/>;
         });
+        cells.push(<td key="metadata">
+                     <MetaSummary data={this.props.geckoMetadata}/>
+                   </td>);
         return (<tr>
                   <th>{this.props.subtest ? this.props.subtest : "<parent>"}</th>
                   {cells}

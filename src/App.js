@@ -676,7 +676,7 @@ class TreeRow extends Component {
     render() {
         return (<li className={"tree-row" + (this.state.showDetails ? " tree-row-expanded" : "")}>
                   <span onClick={this.handleClick}>
-                    {this.state.showDetails ? "\u25BC" : "\u25B6"}
+                    {this.state.showDetails ? "\u25BC " : "\u25B6 "}
                     {this.props.rowTitle}
                   </span>
                   {this.props.rowExtra}
@@ -691,16 +691,10 @@ class TreeRow extends Component {
 class TestItem extends Component {
     render() {
         // TODO: Difference between test path and file path
-        let testUrl = `http://w3c-test.org${this.props.result.test}`;
-        let resultUrl = makeWptFyiUrl(`results/${this.props.result.test}`);
-        let metaUrl = `http://searchfox.org/mozilla-central/source/testing/web-platform/meta${this.props.result.test}.ini`;
-        let rowExtra = (<span>
-                         [<a href={testUrl}>test</a>]
-                         [<a href={resultUrl}>{this.props.result.legacy_status[0].total} subtests</a>]
-                         [<a href={metaUrl}>gecko metadata</a>]</span>);
+        let rowTitle = `${this.props.result.test} [${this.props.result.legacy_status[0].total} subtests]`;
         return (
-                <TreeRow rowTitle={<code>{this.props.result.test}</code>}
-                  rowExtra={rowExtra}>
+                <TreeRow rowTitle={<code>{rowTitle}</code>}
+                  rowExtra={null}>
                   <TestDetails
                     runs={this.props.runs}
                     test={this.props.result.test}
@@ -799,9 +793,14 @@ class TestDetails extends Component {
                                                                            results={results}
                                                                            geckoMetadata={subtestMetadata.get(subtest)} />));
         return (<div>
+                  <ul>
+                    <li><a href={`http://w3c-test.org${this.props.test}`}>Live test</a></li>
+                    <li><a href={makeWptFyiUrl(`results/${this.props.test}`)}>wpt.fyi</a></li>
+                    <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${this.props.test}.ini`}>Gecko Metadata</a></li>
+                  </ul>
                   <MetaSummary
                     test={this.props.test}
-                    data={this.props.geckoMetadata} />
+                    data={this.props.geckoMetadata}/>
                   <section>
                     <h3>Results</h3>
                     <table className="results">
@@ -822,25 +821,27 @@ class TestDetails extends Component {
 
 class MetaSummary extends Component {
     render() {
-        if (!this.props.data) {
-            return null;
-        }
         let renderBug = value => <MaybeBugLink value={value} />;
-        let props = [{name: "disabled", render: renderBug},
-                     {name: "bug", render: renderBug},
-                     {name: "crash", title: "Crashes", render: renderBug}];
-        let items = props
-            .map(item => {
-                if (this.props.data.has(item.name)) {
-                    return (<InlineOrTreeMetadata
-                              key={item.name}
-                              title={item.title ? item.title : capitalize(item.name)}
-                              values={this.props.data.get(item.name)}
-                              render={item.render}/>);
-                }
-                return null;
-            })
-            .filter(x => x !== null);
+        let items;
+        if (this.props.data) {
+            let metaProps = [{name: "disabled", render: renderBug},
+                             {name: "bug", render: renderBug},
+                             {name: "crash", title: "Crashes", render: renderBug}];
+            items = metaProps
+                .map(item => {
+                    if (this.props.data.has(item.name)) {
+                        return (<InlineOrTreeMetadata
+                                  key={item.name}
+                                  title={item.title ? item.title : capitalize(item.name)}
+                                  values={this.props.data.get(item.name)}
+                                  render={item.render}/>);
+                    }
+                    return null;
+                })
+                .filter(x => x !== null);
+        } else {
+            items = [];
+        }
         if (items.length === 0) {
             return null;
         }
@@ -879,7 +880,8 @@ class ResultRow extends Component {
             return <ResultCell result={result} key={run.browser_name}/>;
         });
         cells.push(<td key="metadata">
-                     <MetaSummary data={this.props.geckoMetadata}/>
+                     <MetaSummary
+                       data={this.props.geckoMetadata} />
                    </td>);
         return (<tr>
                   <th>{this.props.subtest ? this.props.subtest : "<parent>"}</th>

@@ -523,7 +523,7 @@ class ResultsView extends Component {
         }
 
         if (this.props.paths.length > 1) {
-            topAndClause.push({"or": this.props.paths.map(path => {return {pattern: path};})});
+            topAndClause.push({"or": this.props.paths.map(path => {return {pattern: path + "/"};})});
         } else {
             topAndClause.push({pattern: this.props.paths[0]});
         }
@@ -541,6 +541,12 @@ class ResultsView extends Component {
             }
         });
         let searchData = await searchResp.json();
+
+        // The search for paths is "contains" so filter to only paths that start with the relevant
+        // directories
+
+        let pathRe = new RegExp(this.props.paths.map(path => `^${path}/`).join("|"));
+        searchData.results = searchData.results.filter(result => pathRe.test(result.test));
 
         return searchData;
 

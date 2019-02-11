@@ -69,6 +69,10 @@ function makeWptFyiUrl(path, params={}) {
     return url;
 }
 
+function capitalize(str) {
+    return str && str[0].toUpperCase() + str.slice(1);
+}
+
 class UrlParams {
     constructor() {
         this.url = new URL(window.location)
@@ -789,19 +793,24 @@ class TestDetails extends Component {
                                                                            results={results}
                                                                            geckoMetadata={subtestMetadata.get(subtest)} />));
         return (<div>
-                  <MetaSummary data={this.props.geckoMetadata} />
-                  <table className="results">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      {headerRow}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resultRows}
-                  </tbody>
-                </table>
-               </div>);
+                  <MetaSummary
+                    test={this.props.test}
+                    data={this.props.geckoMetadata} />
+                  <section>
+                    <h3>Results</h3>
+                    <table className="results">
+                      <thead>
+                        <tr>
+                          <th></th>
+                          {headerRow}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {resultRows}
+                      </tbody>
+                    </table>
+                  </section>
+                </div>);
     }
 }
 
@@ -810,26 +819,52 @@ class MetaSummary extends Component {
         if (!this.props.data) {
             return null;
         }
-        let items = [];
-        if (this.props.data.has("disabled")) {
-            items.push(<p key="disabled">Disabled in (some) gecko configurations</p>);
-        }
-        if (this.props.data.has("bug")) {
-            let bugValue = this.props.data.get("bug");
-            let unconditionalValue;
-            for (let [cond, value] of bugValue) {
-                if (cond === null) {
-                    unconditionalValue = value;
+        let renderBug = value => <MaybeBugLink value={value} />;
+        let props = [{name: "disabled", render: renderBug},
+                     {name: "bug", render: renderBug},
+                     {name: "crash", title: "Crashes", render: renderBug}];
+        let items = props
+            .map(item => {
+                if (this.props.data.has(item.name)) {
+                    return (<InlineOrTreeMetadata
+                              key={item.name}
+                              title={item.title ? item.title : capitalize(item.name)}
+                              values={this.props.data.get(item.name)}
+                              render={item.render}/>);
                 }
-            }
-            if (unconditionalValue) {
-                items.push(<MaybeBugLink key="bug" value={unconditionalValue}/>);
-            }
+                return null;
+            })
+            .filter(x => x !== null);
+        if (items.length === 0) {
+            return null;
         }
-        return items;
+        return (<section>
+                  <h3>Gecko Metadata</h3>
+                  <ul>
+                    {items}
+                  </ul>
+                </section>);
     }
 }
 
+class InlineOrTreeMetadata extends Component {
+    render() {
+        if (!this.props.values) {
+            return null;
+        }
+        if (this.props.values.length === 1 && this.props.values[0][0] === null) {
+            // We have a single unconditional value for the property so render inline
+            return (<li>
+                      {this.props.title}: {this.props.render(this.props.values[0])}
+                    </li>);
+        } else {
+            return (<GeckoMetadataLine
+                      title={this.props.title}
+                      values={this.props.values}
+                      render={this.props.render}/>);
+        }
+    }
+}
 
 class ResultRow extends Component {
     render() {
@@ -902,20 +937,18 @@ class GeckoData extends Component {
     }
 
     render() {
-        console.log(this.props.data);
         let content;
         if (this.props.data === null) {
             content = <p>Loading</p>;
         } else {
             content = [];
             let byType = this.groupData();
-            console.log(byType);
             if (byType.crashes) {
                 let items = [];
                 for (let [test, values] of iterMapSorted(byType.crashes)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
-                                 test={test}
+                                 title={test}
                                  values={values}
                                  render={value => null}/>);
                 }
@@ -932,7 +965,7 @@ class GeckoData extends Component {
                 for (let [test, values] of iterMapSorted(byType.disabled)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
-                                 test={test}
+                                 title={test}
                                  values={values}
                                  render={value => <MaybeBugLink value={value} />}/>);
                 }
@@ -949,7 +982,7 @@ class GeckoData extends Component {
                 for (let [test, values] of iterMapSorted(byType.lsan)) {
                     items.push(<GeckoMetadataLine
                                  key={test}
-                                 test={test}
+                                 title={test}
                                  values={values}
                                  render={value => <LsanListValue value={value}/>} />);
                 }
@@ -988,7 +1021,7 @@ class GeckoMetadataLine extends Component {
             valueList = <ul className="tree-row">{values}</ul>;
         }
         return (<TreeRow
-                  rowTitle={this.props.test}
+                  rowTitle={this.props.title}
                   rowExtra={null}>
                   {valueList}
                 </TreeRow>);

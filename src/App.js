@@ -8,6 +8,12 @@ const WPT_FYI_BASE = "https://staging.wpt.fyi";
 
 const passStatuses = new Set(["PASS", "OK"]);
 
+const LOADING_STATE = Object.freeze({
+    NONE: 0,
+    LOADING: 1,
+    COMPLETE: 2
+});
+
 function* reversed(array) {
     let index = array.length;
     while (index > 0) {
@@ -259,11 +265,13 @@ class App extends Component {
     }
 
     async componentDidMount() {
+        this.setState({loading_state: LOADING_STATE.LOADING});
         let bugComponentPromise = this.loadBugComponentData();
         let wptRunDataPromise = this.loadWptRunData();
         let geckoMetadataPromise = this.loadGeckoMetadata();
 
         await Promise.all([bugComponentPromise, wptRunDataPromise, geckoMetadataPromise]);
+        this.setState({loading_state: LOADING_STATE.COMPLETE});
     }
 
     filterGeckoMetadata() {
@@ -376,6 +384,53 @@ class App extends Component {
 
     render() {
         let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
+        let body;
+        if (this.state.loading_state != LOADING_STATE.COMPLETE) {
+            body = <p>Loading…</p>;
+        } else {
+            body = [<section id="selector">
+                      <RunInfo runs={this.state.wptRuns}/>
+                      <BugComponentSelector onComponentChange={this.onComponentChange}
+                                            components={this.state.bugComponents}
+                                            value={this.state.currentBugComponent} />
+                      <TestPaths
+                        paths={paths}
+                        selectedPaths={this.state.selectedPaths}
+                        onChange={this.onPathsChange} />
+                    </section>,
+                    <section id="details">
+                      <Tabs>
+                        <ResultsView label="Firefox-only Failures"
+                                     failsIn={["firefox"]}
+                                     passesIn={["safari", "chrome"]}
+                                     runs={this.state.wptRuns}
+                                     paths={Array.from(this.state.selectedPaths)}
+                                     geckoMetadata={this.state.pathMetadata}
+                                     onError={this.onError}>
+                          <h2>Firefox-only Failures</h2>
+                          <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
+                        </ResultsView>
+                        <ResultsView label="All Firefox Failures"
+                                     failsIn={["firefox"]}
+                                     passesIn={[]}
+                                     runs={this.state.wptRuns}
+                                     paths={Array.from(this.state.selectedPaths)}
+                                     geckoMetadata={this.state.pathMetadata}
+                                     onError={this.onError}>
+                          <h2>All Firefox Failures</h2>
+                          <p>Tests that fail in Firefox</p>
+                        </ResultsView>
+                        <GeckoData label="Gecko Data"
+                                   data={this.state.pathMetadata}
+                                   paths={Array.from(this.state.selectedPaths)}
+                                   onError={this.onError}>
+                          <h2>Gecko metadata</h2>
+                          <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
+                          <p>Note: this data is currently not kept up to date</p>
+                        </GeckoData>
+                      </Tabs>
+                    </section>];
+        }
         return (
             <div id="app">
               <ErrorArea errors={this.state.errors}
@@ -383,48 +438,7 @@ class App extends Component {
               <header>
                 <h1>wpt interop dashboard</h1>
               </header>
-              <section id="selector">
-                <RunInfo runs={this.state.wptRuns}/>
-                <BugComponentSelector onComponentChange={this.onComponentChange}
-                                      components={this.state.bugComponents}
-                                      value={this.state.currentBugComponent} />
-                <TestPaths
-                  paths={paths}
-                  selectedPaths={this.state.selectedPaths}
-                  onChange={this.onPathsChange} />
-              </section>
-              <section id="details">
-                <Tabs>
-                  <ResultsView label="Firefox-only Failures"
-                               failsIn={["firefox"]}
-                               passesIn={["safari", "chrome"]}
-                               runs={this.state.wptRuns}
-                               paths={Array.from(this.state.selectedPaths)}
-                               geckoMetadata={this.state.pathMetadata}
-                               onError={this.onError}>
-                    <h2>Firefox-only Failures</h2>
-                    <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
-                  </ResultsView>
-                  <ResultsView label="All Firefox Failures"
-                               failsIn={["firefox"]}
-                               passesIn={[]}
-                               runs={this.state.wptRuns}
-                               paths={Array.from(this.state.selectedPaths)}
-                               geckoMetadata={this.state.pathMetadata}
-                               onError={this.onError}>
-                    <h2>All Firefox Failures</h2>
-                    <p>Tests that fail in Firefox</p>
-                  </ResultsView>
-                <GeckoData label="Gecko Data"
-                           data={this.state.pathMetadata}
-                           paths={Array.from(this.state.selectedPaths)}
-                           onError={this.onError}>
-                  <h2>Gecko metadata</h2>
-                  <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
-                  <p>Note: this data is currently not kept up to date</p>
-                </GeckoData>
-                </Tabs>
-              </section>
+              {body}
             </div>
         );
     }
@@ -588,7 +602,7 @@ class ResultsView extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            loaded: false,
+            loading_state: LOADING_STATE.NONE,
             results: [],
         };
     }
@@ -661,7 +675,7 @@ class ResultsView extends Component {
         let pathRe = new RegExp(this.props.paths.map(path => `^${path}/`).join("|"));
         results.results = results.results.filter(result => pathRe.test(result.test));
 
-        this.setState({results, loaded: true});
+        this.setState({results, loading_state: LOADING_STATE.COMPLETE});
     }
 
     getMetadata(test) {
@@ -705,7 +719,7 @@ class ResultsView extends Component {
     }
 
     render() {
-        if (!this.props.runs || !this.state.loaded) {
+        if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
             return (<div>
                       {this.props.children}
                       <p>Loading…</p>
@@ -751,25 +765,29 @@ class ResultsView extends Component {
     }
 
     async fetchIfPossible(prevProps) {
+        if (this.state.loading_state === LOADING_STATE.LOADING) {
+            return;
+        }
         if (this.props.runs === null) {
             return;
         }
         if (!this.props.paths) {
             return;
         }
-        if (this.state.loaded &&
-            arraysEqual(this.props.paths, prevProps.paths) &&
-            arraysEqual(this.props.failsIn, prevProps.failsIn) &&
-            arraysEqual(this.props.passesIn, prevProps.passesIn)) {
+        if (this.state.loading_state === LOADING_STATE.COMPLETE &&
+            this.props.paths === prevProps.paths &&
+            this.props.failsIn === prevProps.failsIn &&
+            this.props.passesIn === prevProps.passesIn) {
             return;
         }
         if (!this.props.paths.length) {
             this.setState({results: {results: []},
-                           loaded: true});
+                           loading_state: LOADING_STATE.COMPLETE});
             return;
         }
-        let results = await this.fetchResults();
-        this.setState({results, loaded: true});
+        this.setState({results: null,
+                       loading_state: LOADING_STATE.LOADING});
+        await this.fetchResults();
     }
 }
 

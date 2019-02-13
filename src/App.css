@@ -47,6 +47,7 @@ ol.tab-strip > li {
     margin-bottom: -1px;
     padding-left: 1em;
     padding-right: 1em;
+    cursor: default;
 }
 
 ol.tab-strip > li.tab-active {

@@ -108,3 +108,20 @@ td.result-crash {
 td.result-notrun {
     background-color: grey;
 }
+
+
+ul.errors {
+    position: fixed;
+    top: 0;
+    left: 10%;
+    right: 10%;
+}
+
+ul.errors > li {
+    opacity: 0.9;
+    background-color: #fcc;
+    border: thin solid red;
+    width: 100%;
+    padding: 1em 1em 1em 1em;
+    margin-bottom: 1em;
+}

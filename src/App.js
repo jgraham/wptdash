@@ -73,9 +73,36 @@ function capitalize(str) {
     return str && str[0].toUpperCase() + str.slice(1);
 }
 
+class FetchError extends Error {
+    constructor(resp, message=null) {
+        if (!message) {
+            message = `Fetch for ${resp.url} returned status ${resp.status} ${resp.statusText}`;
+        }
+        super(message);
+        this.resp = resp;
+        this.name = "FetchError";
+    }
+}
+
+async function fetchJson(url, options) {
+    let resp = await fetch(url, options);
+    if (!resp.ok) {
+        throw new FetchError(resp);
+    }
+    return await resp.json();
+}
+
+function *enumerate(iter) {
+    let count = 0;
+    for (let item of iter) {
+        yield [count, item];
+        count++;
+    }
+}
+
 class UrlParams {
     constructor() {
-        this.url = new URL(window.location)
+        this.url = new URL(window.location);
         this.params = this.url.searchParams;
     }
 
@@ -109,6 +136,14 @@ class UrlParams {
 
 const urlParams = new UrlParams();
 
+let makeError = (() => {
+    let id = -1;
+    return (err, options) => {
+        id++;
+        return {id, err, options};
+    };
+})();
+
 class App extends Component {
     constructor(props) {
         super(props);
@@ -120,15 +155,45 @@ class App extends Component {
             wptRuns: null,
             geckoMetadata: {},
             geckoMetadataForPaths: {},
+            errors: [],
+            loading_state: LOADING_STATE.NONE,
         };
     }
 
+    onError = (err, options={}) => {
+        let error = makeError(err, options);
+        this.setState(state => {return {errors: state.errors.concat(error)};});
+    }
+
+    onDismissError = (id) => {
+        let errors = Array.from(this.state.errors);
+        let idx = errors.findIndex(x => x.id === id);
+        if (idx === undefined) {
+            return;
+        }
+        errors.splice(idx, 1);
+        this.setState({errors});
+    }
+
+    async fetchData(url, retry, options={}) {
+        if (!options.hasOwnProperty("redirect")) {
+            options.redirect = "follow";
+        }
+        try {
+            return await fetchJson(url, options);
+        } catch(e) {
+            this.onError(e, {retry});
+            throw e;
+        }
+    }
+
     async loadTaskClusterData(indexName, artifactName) {
-        let taskResp = await fetch(`${TASK_INDEX_BASE}/${indexName}`);
-        let taskData = await taskResp.json();
+        let retry = async () => await this.loadTaskClusterData(indexName, artifactName);
+        let taskData = await this.fetchData(`${TASK_INDEX_BASE}/${indexName}`,
+                                            retry);
         let taskId = taskData.taskId;
-        let taskStatusResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/status`);
-        let taskStatus = await taskStatusResp.json();
+        let taskStatus = await this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/status`,
+                                              retry);
         let runId;
         for (let run of reversed(taskStatus.status.runs)) {
             if (run.state === "completed") {
@@ -136,11 +201,11 @@ class App extends Component {
                 break;
             }
         }
-        let artifactsResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts`);
-        let artifacts = await artifactsResp.json();
+        let artifacts = await this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts`,
+                                             retry);
         let artifactData = artifacts.artifacts.find(artifact => artifact.name.endsWith(artifactName));
-        let artifactResp = await fetch(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts/${artifactData.name}`);
-        return artifactResp.json();
+        return this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts/${artifactData.name}`,
+                              retry);
     }
 
     async loadBugComponentData() {
@@ -181,19 +246,15 @@ class App extends Component {
 
     async loadWptRunData() {
         let runsUrl = makeWptFyiUrl("api/runs", {aligned: ""});
-        let runsResp = await fetch(runsUrl);
-
-        let runsJson = await runsResp.json();
-
-        this.setState({wptRuns: runsJson});
+        let runs = await this.fetchData(runsUrl, async () => this.loadWptRunData());
+        this.setState({wptRuns: runs});
     }
 
     async loadGeckoMetadata() {
 //        let metadata = await this.loadTaskClusterData("index.gecko.v2.try.latest.source.source-wpt-metadata-summary",
 //                                                      "summary.json");
-        let dataResp = await fetch(`https://queue.taskcluster.net/v1/task/Ik2tnR1KQzi26GfvTQ2WHw/runs/0/artifacts/public/summary.json`,
-                                  {redirect: "follow"});
-        let metadata = await dataResp.json();
+        let metadata = await this.fetchData(`https://queue.taskcluster.net/v1/task/Ik2tnR1KQzi26GfvTQ2WHw/runs/0/artifacts/public/summary.json`,
+                                            async () => this.loadGeckoMetadata());
         this.setState({geckoMetadata: metadata});
     }
 
@@ -317,6 +378,8 @@ class App extends Component {
         let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
         return (
             <div id="app">
+              <ErrorArea errors={this.state.errors}
+                         onDismissError={this.onDismissError}/>
               <header>
                 <h1>wpt interop dashboard</h1>
               </header>
@@ -337,7 +400,8 @@ class App extends Component {
                                passesIn={["safari", "chrome"]}
                                runs={this.state.wptRuns}
                                paths={Array.from(this.state.selectedPaths)}
-                               geckoMetadata={this.state.pathMetadata}>
+                               geckoMetadata={this.state.pathMetadata}
+                               onError={this.onError}>
                     <h2>Firefox-only Failures</h2>
                     <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
                   </ResultsView>
@@ -346,13 +410,15 @@ class App extends Component {
                                passesIn={[]}
                                runs={this.state.wptRuns}
                                paths={Array.from(this.state.selectedPaths)}
-                               geckoMetadata={this.state.pathMetadata}>
+                               geckoMetadata={this.state.pathMetadata}
+                               onError={this.onError}>
                     <h2>All Firefox Failures</h2>
                     <p>Tests that fail in Firefox</p>
                   </ResultsView>
                 <GeckoData label="Gecko Data"
                            data={this.state.pathMetadata}
-                           paths={Array.from(this.state.selectedPaths)}>
+                           paths={Array.from(this.state.selectedPaths)}
+                           onError={this.onError}>
                   <h2>Gecko metadata</h2>
                   <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
                   <p>Note: this data is currently not kept up to date</p>
@@ -361,6 +427,47 @@ class App extends Component {
               </section>
             </div>
         );
+    }
+}
+
+class ErrorArea extends Component {
+    onDismiss = (id) => {
+        this.props.onDismissError(id);
+    }
+
+    render() {
+        if (!this.props.errors.length) {
+            return null;
+        }
+        let errorLines = [];
+        for (let [idx, error] of enumerate(this.props.errors)) {
+            errorLines.push(<ErrorLine
+                              key={`error-${error.id}`}
+                              error={error}
+                              onDismiss={() => this.onDismiss(idx)}/>);
+        }
+        return (<ul className="errors">
+                  {errorLines}
+                </ul>);
+    }
+}
+
+class ErrorLine extends Component {
+    render() {
+        let {id, err, options} = this.props.error;
+        let extraControls = [];
+        if (options.retry) {
+            let retry = () => {
+                this.props.onDismiss(id);
+                options.retry();
+            };
+            extraControls.push(<button onClick={retry} key="retry">Retry</button>);
+        }
+        return (<li>
+                  {err.message || "Unknown Error"}
+                  <button onClick={() => this.props.onDismiss(id)}>Close</button>
+                  {extraControls}
+                </li>);
     }
 }
 
@@ -533,23 +640,28 @@ class ResultsView extends Component {
     async fetchResults() {
         let searchQuery = this.buildQuery();
 
-        let searchResp = await fetch(makeWptFyiUrl("api/search", {}), {
-            method: "POST",
-            body: JSON.stringify(searchQuery),
-            headers:{
-                  'Content-Type': 'application/json'
-            }
-        });
-        let searchData = await searchResp.json();
+        let results;
+        try {
+            results = await fetchJson(makeWptFyiUrl("api/search", {}), {
+                method: "POST",
+                body: JSON.stringify(searchQuery),
+                headers:{
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch(e) {
+            this.props.onError(e, {retry: async () => this.fetchResults()});
+            this.setState({loading_state: LOADING_STATE.COMPLETE});
+            throw e;
+        }
 
         // The search for paths is "contains" so filter to only paths that start with the relevant
         // directories
 
         let pathRe = new RegExp(this.props.paths.map(path => `^${path}/`).join("|"));
-        searchData.results = searchData.results.filter(result => pathRe.test(result.test));
+        results.results = results.results.filter(result => pathRe.test(result.test));
 
-        return searchData;
-
+        this.setState({results, loaded: true});
     }
 
     getMetadata(test) {
@@ -612,13 +724,13 @@ class ResultsView extends Component {
                     </div>);
         }
         let testItems = this.state.results.results.map(result => (<TestItem
-                                                                  failsIn={this.props.failsIn}
-                                                                  passesIn={this.props.passesIn}
-                                                                  runs={this.props.runs}
-                                                                  result={result}
-                                                                  key={result.test}
-                                                                  geckoMetadata={this.getMetadata(result.test)}
-/>));
+                                                                    failsIn={this.props.failsIn}
+                                                                    passesIn={this.props.passesIn}
+                                                                    runs={this.props.runs}
+                                                                    result={result}
+                                                                    key={result.test}
+                                                                    geckoMetadata={this.getMetadata(result.test)}
+                                                                    onError={this.props.onError}/>));
         testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
@@ -700,7 +812,8 @@ class TestItem extends Component {
                     test={this.props.result.test}
                     passesIn={this.props.passesIn}
                     failsIn={this.props.failsIn}
-                    geckoMetadata={this.props.geckoMetadata} />
+                    geckoMetadata={this.props.geckoMetadata}
+                    onError={this.props.onError} />
             </TreeRow>
         );
     }
@@ -733,7 +846,8 @@ class TestDetails extends Component {
         }
 
         for (let resultByBrowser of resultBySubtest.values()) {
-            for (let browser of results.keys()) {
+            for (let run of this.props.runs) {
+                let browser = run.browser_name;
                 if (!resultByBrowser.has(browser)) {
                     resultByBrowser.set(browser, {status: "MISSING",
                                                   message: null});
@@ -759,8 +873,10 @@ class TestDetails extends Component {
         return rv.concat(Array.from(filteredResultBySubtest));
     }
 
-    async componentDidMount() {
+    async fetchData() {
         let resultData = new Map();
+        let browsers = [];
+        let promises = [];
         for (let run of this.props.runs) {
             let browser = run.browser_name;
             let summaryUrl = run.results_url;
@@ -768,15 +884,27 @@ class TestDetails extends Component {
             // Remove the part of the url after the last -
             parts.pop();
             let url = `${parts.join('-')}${this.props.test}`;
-            resultData.set(browser, fetch(url).then(resp => resp.json()));
+            let promise = fetchJson(url)
+                .then(x => {return {success: true, value:x};})
+                .catch(e => {return {success: false, value:e};});
+            browsers.push(browser);
+            promises.push(promise);
         }
-        await Promise.all(Array.from(resultData.values()));
-        for (let [browser, promise] of resultData) {
-            resultData.set(browser, await promise);
+        let resolved = await Promise.all(promises);
+        for (let [idx, data] of enumerate(resolved)) {
+            if (data.success) {
+                let browser = browsers[idx];
+                resultData.set(browser, data.value);
+            }
         }
         let filteredResults = this.processResultData(resultData);
         this.setState({results: filteredResults,
                        loaded: true});
+
+    }
+
+    async componentDidMount() {
+        await this.fetchData();
     }
 
     render() {

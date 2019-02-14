@@ -140,6 +140,22 @@ class UrlParams {
     }
 }
 
+const anyRe = /^(.*\.any)(:?\..*)\.html$/;
+const workerRe = /^(.*\.(:?worker|window))\.html$/;
+
+function testToPath(test) {
+    let url = new URL(`https://web-platform.test${test}`);
+    let path = url.pathname;
+    let match = anyRe.exec(path);
+    if (match === null) {
+        match = workerRe.exec(path);
+    }
+    if (match !== null) {
+        path = match[1] + '.js';
+    }
+    return path;
+}
+
 const urlParams = new UrlParams();
 
 let makeError = (() => {
@@ -942,7 +958,7 @@ class TestDetails extends Component {
                   <ul>
                     <li><a href={`http://w3c-test.org${this.props.test}`}>Live test</a></li>
                     <li><a href={makeWptFyiUrl(`results/${this.props.test}`)}>wpt.fyi</a></li>
-                    <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${this.props.test}.ini`}>Gecko Metadata</a></li>
+                    <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${testToPath(this.props.test)}.ini`}>Gecko Metadata</a></li>
                   </ul>
                   <MetaSummary
                     test={this.props.test}

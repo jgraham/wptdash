@@ -741,7 +741,7 @@ class ResultsView extends Component {
                       <p>Loading…</p>
                     </div>);
         }
-        if (this.state.results.results === null) {
+        if (this.state.results === null) {
             return (<div>
                       {this.props.children}
                       <p>Load failed</p>

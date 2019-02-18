@@ -354,10 +354,10 @@ class App extends Component {
     render() {
         let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
         let body;
-        if (this.state.loading_state != LOADING_STATE.COMPLETE) {
+        if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
             body = <p>Loading…</p>;
         } else {
-            body = [<section id="selector">
+            body = [<section id="selector" key="selector">
                       <RunInfo runs={this.state.wptRuns}/>
                       <BugComponentSelector onComponentChange={this.onComponentChange}
                                             components={this.state.bugComponents}
@@ -367,7 +367,7 @@ class App extends Component {
                         selectedPaths={this.state.selectedPaths}
                         onChange={this.onPathsChange} />
                     </section>,
-                    <section id="details">
+                    <section id="details" key="details">
                       <Tabs>
                         <ResultsView label="Firefox-only Failures"
                                      failsIn={["firefox"]}

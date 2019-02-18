@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
+import {filterCompiler} from './filter';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
@@ -572,6 +573,8 @@ class ResultsView extends Component {
         this.state = {
             loading_state: LOADING_STATE.NONE,
             results: [],
+            filter: null,
+            filteredResults: null
         };
     }
 
@@ -643,6 +646,9 @@ class ResultsView extends Component {
         let pathRe = new RegExp(this.props.paths.map(path => `^${path}/`).join("|"));
         results.results = results.results.filter(result => pathRe.test(result.test));
 
+        // TODO: should be able to do this more efficiently
+        results.results.forEach(result => result._geckoMetadata = this.getMetadata(result.test));
+
         this.setState({results, loading_state: LOADING_STATE.COMPLETE});
     }
 
@@ -686,6 +692,24 @@ class ResultsView extends Component {
         return metadata;
     }
 
+    onFilterChange = (filter) => {
+        console.log("onFilterChange");
+        let filterFunc = filterCompiler(filter);
+        this.setState({filter: filterFunc});
+    }
+
+    updateFilteredResults() {
+        let filteredResults;
+        if (!this.state.results) {
+            filteredResults = this.state.results;
+        } else if (!this.state.filter) {
+            filteredResults = this.state.results.results;
+        } else {
+            filteredResults = this.state.results.results.filter(x => this.state.filter(x));
+        }
+        this.setState({filteredResults});
+    }
+
     render() {
         if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
             return (<div>
@@ -705,19 +729,21 @@ class ResultsView extends Component {
                       <p>No results</p>
                     </div>);
         }
-        let testItems = this.state.results.results.map(result => (<TestItem
-                                                                    failsIn={this.props.failsIn}
-                                                                    passesIn={this.props.passesIn}
-                                                                    runs={this.props.runs}
-                                                                    result={result}
-                                                                    key={result.test}
-                                                                    geckoMetadata={this.getMetadata(result.test)}
-                                                                    onError={this.props.onError}/>));
+        let results = this.state.filteredResults ? this.state.filteredResults : [];
+        let testItems = results.map(result => (<TestItem
+                                                 failsIn={this.props.failsIn}
+                                                 passesIn={this.props.passesIn}
+                                                 runs={this.props.runs}
+                                                 result={result}
+                                                 key={result.test}
+                                                 geckoMetadata={result.test._geckoMetadata}
+                                                 onError={this.props.onError}/>));
         testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
-                  <p>{this.state.results.results.length} top-level tests with
-                    &nbsp;{this.state.results.results
+                  <ResultsFilter onUpdate={this.onFilterChange} />
+                  <p>{results.length} top-level tests with
+                    &nbsp;{results
                      .map(x => x.legacy_status[0].total)
                      .reduce((x,y) => x+y, 0)} subtests</p>
                   <ul>{testItems}</ul>
@@ -728,8 +754,12 @@ class ResultsView extends Component {
         await this.fetchIfPossible({});
     }
 
-    async componentDidUpdate(prevProps) {
+    async componentDidUpdate(prevProps, prevState) {
         await this.fetchIfPossible(prevProps);
+        if (prevState.results !== this.state.results ||
+            prevState.filter !== this.state.filter) {
+            this.updateFilteredResults();
+        }
     }
 
     async fetchIfPossible(prevProps) {
@@ -802,6 +832,43 @@ class TestItem extends Component {
                     onError={this.props.onError} />
             </TreeRow>
         );
+    }
+}
+
+class ResultsFilter extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            testFilter: null,
+            dirty: false
+        };
+    }
+
+    updateFilter = () => {
+        let filter = {and: []};
+        let filterArray = filter.and;
+        if (this.state.testFilter) {
+           filterArray.push({'contains': {'test': this.state.testFilter}});
+        }
+        this.props.onUpdate(filter);
+    }
+
+    onTestChange = (event) => {
+        this.setState({testFilter: event.target.value});
+    }
+
+    render() {
+        return (
+            <div>
+            <label>Test id: <Input onChange={this.onTestChange} /></label>
+              <button onClick={this.updateFilter}>Update</button>
+            </div>);
+    }
+}
+
+class Input extends Component {
+    render() {
+        return <input onChange={this.props.onChange} />;
     }
 }
 

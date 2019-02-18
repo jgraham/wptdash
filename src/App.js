@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import './App.css';
+import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
@@ -13,47 +14,6 @@ const LOADING_STATE = Object.freeze({
     LOADING: 1,
     COMPLETE: 2
 });
-
-function* reversed(array) {
-    let index = array.length;
-    while (index > 0) {
-        index--;
-        yield array[index];
-    }
-};
-
-function arraysEqual(a, b) {
-    if (a === b) {
-        return true;
-    }
-    if (!Array.isArray(a) || !Array.isArray(b)) {
-        return false;
-    }
-    if (a.length !== b.length) {
-        return false;
-    }
-    return a.every((a_value, i) => a_value === b[i]);
-}
-
-function setsEqual(a, b) {
-    if (a.size !== b.size) {
-        return false;
-    }
-    for(let elem of a) {
-        if (!b.has(elem)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-function* iterMapSorted(map, cmp) {
-    let keys = Array.from(map.keys());
-    keys.sort();
-    for (let key of keys) {
-        yield [key, map.get(key)];
-    }
-}
 
 function makeWptFyiUrl(path, params={}) {
     let url = new URL(`${WPT_FYI_BASE}/${path}`);
@@ -96,14 +56,6 @@ async function fetchJson(url, options) {
         throw new FetchError(resp);
     }
     return await resp.json();
-}
-
-function *enumerate(iter) {
-    let count = 0;
-    for (let item of iter) {
-        yield [count, item];
-        count++;
-    }
 }
 
 class UrlParams {

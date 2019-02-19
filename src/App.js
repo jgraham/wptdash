@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 import {filterCompiler} from './filter';
+import {Checkbox, TextInput, Select} from './form';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
@@ -470,24 +471,24 @@ class RunInfo extends Component {
 }
 
 class BugComponentSelector extends Component {
-    handleChange = (event) => {
-        this.props.onComponentChange(event.target.value);
+    handleChange = (value) => {
+        this.props.onComponentChange(value);
     }
 
     render() {
-        let selectItems = this.props.components.map(component => <option value={component.toLowerCase()} key={component.toLowerCase()}>{component}</option>);
+        let options = this.props.components.map(component => {
+            return {value:component.toLowerCase(), name:component};
+        });
         if (!this.props.value) {
             return null;
         }
         return (<section>
                   <label>Bug Component: </label>
-                  <select
+                  <Select
                     onChange={this.handleChange}
-                    value={this.props.value}>
-                    {selectItems}
-                  </select>
-                </section>
-               );
+                    value={this.props.value}
+                    options={options}/>
+                </section>);
     }
 }
 
@@ -545,27 +546,6 @@ class TestPaths extends Component {
     }
 }
 
-class Checkbox extends Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            checked: this.props.checked
-        };
-    }
-
-    handleChange = (event) => {
-        this.setState({checked: event.target.checked ? true : false});
-        this.props.onCheckboxChange(this.props.value, event.target.checked);
-    }
-
-    render() {
-        return (<input
-                  name={this.props.path}
-                  type="checkbox"
-                  checked={this.state.checked}
-                  onChange={this.handleChange} />);
-    }
-}
 
 class ResultsView extends Component {
     constructor(props) {

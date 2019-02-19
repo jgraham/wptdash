@@ -126,3 +126,16 @@ ul.errors > li {
     padding: 1em 1em 1em 1em;
     margin-bottom: 1em;
 }
+
+.note {
+    background-color: #efe;
+    font-style: italic;
+    margin-left: 1em;
+    margin-right: 1em;
+}
+
+.note::before {
+    content: "Note:";
+    font-weight: bold;
+    padding-right: 0.5em;
+}

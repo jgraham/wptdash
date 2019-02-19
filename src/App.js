@@ -154,8 +154,6 @@ class App extends Component {
     }
 
     onFilterChange = (filter) => {
-        console.log("onFilterChange");
-        console.log(filter);
         let filterFunc = filter ? filterCompiler(filter) : null;
         this.setState({filter, filterFunc});
       }
@@ -517,12 +515,11 @@ class Filter extends Component {
             type: type,
             data: data
         };
-        console.log(type);
-        console.log(data);
         props.onChange(data);
     }
 
     getType() {
+        // TODO: Maybe this should be in the parent
         let [type, data] = ["none", null];
         let urlValue = urlParams.get("filter");
         if (urlValue) {
@@ -555,12 +552,22 @@ class Filter extends Component {
     }
 
     render() {
+        let triageText = `Triaged status is currently derived from a bug: annotation in
+the gecko metadata on the test file (not on subtests). In the future this will change to
+include external annotations accessible to wpt.fyi`;
+        let optionText = {
+            "triaged": triageText,
+            "untriaged": triageText,
+            "custom": "UI for custom filters is not yet implemented"
+        };
         let options = Array.from(this.types).map(([value, {name}]) => ({value, name}));
         return (<section>
                   <label>Filter:</label>
-                    <Select options={options}
-                            value={this.state.type}
-                            onChange={this.onTypeChange}/>
+                  <Select options={options}
+                          value={this.state.type}
+                          onChange={this.onTypeChange}/>
+                  {optionText.hasOwnProperty(this.state.type) ?
+                   <p className="note">{optionText[this.state.type]}</p> : null}
                 </section>);
     }
 }

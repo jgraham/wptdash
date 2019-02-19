@@ -29,6 +29,13 @@ let handlers = {
 
     contains: (data) => {
         return operators.contains(data);
+    },
+
+    has: data => {
+        if (typeof data !== "string") {
+            throw new FilterError("Argument to 'has' clause must be a string");
+        }
+        return operators.has(data);
     }
 };
 
@@ -57,6 +64,13 @@ let operators = {
             }
             return ctxValue.includes(value);
         };
+    },
+
+    has: (arg) => {
+        return (ctx) => {
+            let ctxValue = getValue(ctx, arg);
+            return ctxValue !== undefined;
+        };
     }
 };
 
@@ -64,7 +78,11 @@ function getValue(ctx, key) {
     let keyParts = key.split(".");
     let target = ctx;
     for (let part of keyParts) {
-        target = target[part];
+        if (target instanceof Map) {
+            target = target.get(part);
+        } else {
+            target = target[part];
+        }
         if (target === undefined) {
             return undefined;
         }

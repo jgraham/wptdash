@@ -133,6 +133,8 @@ class App extends Component {
             geckoMetadataForPaths: {},
             errors: [],
             loading_state: LOADING_STATE.NONE,
+            filter: null,
+            filterFunc: null,
         };
     }
 
@@ -150,6 +152,13 @@ class App extends Component {
         errors.splice(idx, 1);
         this.setState({errors});
     }
+
+    onFilterChange = (filter) => {
+        console.log("onFilterChange");
+        console.log(filter);
+        let filterFunc = filter ? filterCompiler(filter) : null;
+        this.setState({filter, filterFunc});
+      }
 
     async fetchData(url, retry, options={}) {
         if (!options.hasOwnProperty("redirect")) {
@@ -363,6 +372,7 @@ class App extends Component {
                       <BugComponentSelector onComponentChange={this.onComponentChange}
                                             components={this.state.bugComponents}
                                             value={this.state.currentBugComponent} />
+                      <Filter onChange={this.onFilterChange} />
                       <TestPaths
                         paths={paths}
                         selectedPaths={this.state.selectedPaths}
@@ -376,7 +386,8 @@ class App extends Component {
                                      runs={this.state.wptRuns}
                                      paths={Array.from(this.state.selectedPaths)}
                                      geckoMetadata={this.state.pathMetadata}
-                                     onError={this.onError}>
+                                     onError={this.onError}
+                                     filter={this.state.filterFunc}>
                           <h2>Firefox-only Failures</h2>
                           <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
                         </ResultsView>
@@ -386,7 +397,8 @@ class App extends Component {
                                      runs={this.state.wptRuns}
                                      paths={Array.from(this.state.selectedPaths)}
                                      geckoMetadata={this.state.pathMetadata}
-                                     onError={this.onError}>
+                                     onError={this.onError}
+                                     filter={this.state.filterFunc}>
                           <h2>All Firefox Failures</h2>
                           <p>Tests that fail in Firefox</p>
                         </ResultsView>
@@ -488,6 +500,67 @@ class BugComponentSelector extends Component {
                     onChange={this.handleChange}
                     value={this.props.value}
                     options={options}/>
+                </section>);
+    }
+}
+
+class Filter extends Component {
+    types = new Map(Object.entries({none: {name: "None", filter: null},
+                                    untriaged: {name: "Untriaged", filter: {not: {has: "_geckoMetadata.bug"}}},
+                                    triaged: {name: "Triaged", filter: {has: "_geckoMetadata.bug"}},
+                                    custom: {name: "Custom…", filter: null}}));
+
+    constructor(props) {
+        super(props);
+        let [type, data] = this.getType();
+        this.state = {
+            type: type,
+            data: data
+        };
+        console.log(type);
+        console.log(data);
+        props.onChange(data);
+    }
+
+    getType() {
+        let [type, data] = ["none", null];
+        let urlValue = urlParams.get("filter");
+        if (urlValue) {
+            [type, data] = urlValue.split(":", 1);
+        }
+        if (!this.types.has(type)) {
+            type = "none";
+        }
+        if (type !== "custom") {
+            data = this.types.get(type).filter;
+        }
+        return [type, data];
+    }
+
+    onTypeChange = (type) => {
+        this.setState({type: type});
+        let data;
+        if (type === "none") {
+            urlParams.delete("filter");
+            data = null;
+        } else if(type === "custom") {
+            let data = this.state.data;
+            urlParams.set("filter", `custom:${JSON.stringify(data)}`);
+        } else {
+            urlParams.set("filter", type);
+            data = this.types.get(type).filter;
+        }
+
+        this.props.onChange(data);
+    }
+
+    render() {
+        let options = Array.from(this.types).map(([value, {name}]) => ({value, name}));
+        return (<section>
+                  <label>Filter:</label>
+                    <Select options={options}
+                            value={this.state.type}
+                            onChange={this.onTypeChange}/>
                 </section>);
     }
 }
@@ -672,20 +745,14 @@ class ResultsView extends Component {
         return metadata;
     }
 
-    onFilterChange = (filter) => {
-        console.log("onFilterChange");
-        let filterFunc = filterCompiler(filter);
-        this.setState({filter: filterFunc});
-    }
-
     updateFilteredResults() {
         let filteredResults;
         if (!this.state.results) {
             filteredResults = this.state.results;
-        } else if (!this.state.filter) {
+        } else if (!this.props.filter) {
             filteredResults = this.state.results.results;
         } else {
-            filteredResults = this.state.results.results.filter(x => this.state.filter(x));
+            filteredResults = this.state.results.results.filter(x => this.props.filter(x));
         }
         this.setState({filteredResults});
     }
@@ -716,12 +783,11 @@ class ResultsView extends Component {
                                                  runs={this.props.runs}
                                                  result={result}
                                                  key={result.test}
-                                                 geckoMetadata={result.test._geckoMetadata}
+                                                 geckoMetadata={result.test._geckoMetadata || new Map()}
                                                  onError={this.props.onError}/>));
         testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
-                  <ResultsFilter onUpdate={this.onFilterChange} />
                   <p>{results.length} top-level tests with
                     &nbsp;{results
                      .map(x => x.legacy_status[0].total)
@@ -736,8 +802,7 @@ class ResultsView extends Component {
 
     async componentDidUpdate(prevProps, prevState) {
         await this.fetchIfPossible(prevProps);
-        if (prevState.results !== this.state.results ||
-            prevState.filter !== this.state.filter) {
+        if (prevState.filter !== this.state.filter) {
             this.updateFilteredResults();
         }
     }
@@ -766,6 +831,7 @@ class ResultsView extends Component {
         this.setState({results: null,
                        loading_state: LOADING_STATE.LOADING});
         await this.fetchResults();
+        this.updateFilteredResults();
     }
 }
 
@@ -812,43 +878,6 @@ class TestItem extends Component {
                     onError={this.props.onError} />
             </TreeRow>
         );
-    }
-}
-
-class ResultsFilter extends Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            testFilter: null,
-            dirty: false
-        };
-    }
-
-    updateFilter = () => {
-        let filter = {and: []};
-        let filterArray = filter.and;
-        if (this.state.testFilter) {
-           filterArray.push({'contains': {'test': this.state.testFilter}});
-        }
-        this.props.onUpdate(filter);
-    }
-
-    onTestChange = (event) => {
-        this.setState({testFilter: event.target.value});
-    }
-
-    render() {
-        return (
-            <div>
-            <label>Test id: <Input onChange={this.onTestChange} /></label>
-              <button onClick={this.updateFilter}>Update</button>
-            </div>);
-    }
-}
-
-class Input extends Component {
-    render() {
-        return <input onChange={this.props.onChange} />;
     }
 }
 

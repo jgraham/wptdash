@@ -4,19 +4,19 @@ self.__precacheManifest = [
     "url": "/wptdash/static/js/runtime~main.946e0fbb.js"
   },
   {
-    "revision": "0463b98bd3a655eab5fe",
-    "url": "/wptdash/static/js/main.0463b98b.chunk.js"
+    "revision": "dee6890312ba7bef93f8",
+    "url": "/wptdash/static/js/main.dee68903.chunk.js"
   },
   {
     "revision": "3f88335e2b4a4b2cbd2f",
     "url": "/wptdash/static/js/1.3f88335e.chunk.js"
   },
   {
-    "revision": "0463b98bd3a655eab5fe",
-    "url": "/wptdash/static/css/main.cb05b7a3.chunk.css"
+    "revision": "dee6890312ba7bef93f8",
+    "url": "/wptdash/static/css/main.ff75032d.chunk.css"
   },
   {
-    "revision": "0f9d0e7f79dc214a0171433ab55f5059",
+    "revision": "e350604331c1b60e3ed00c95d30a6daa",
     "url": "/wptdash/index.html"
   }
 ];

@@ -7,7 +7,7 @@ import {Checkbox, TextInput, Select} from './form';
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
 
-const WPT_FYI_BASE = "https://staging.wpt.fyi";
+const WPT_FYI_BASE = "https://wpt.fyi";
 
 const passStatuses = new Set(["PASS", "OK"]);
 

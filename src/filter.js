@@ -1,3 +1,5 @@
+import {enumerate} from './utils';
+
 class FilterError extends Error {};
 
 let handlers = {
@@ -102,3 +104,160 @@ export function filterCompiler(input) {
     return handlers[op](input[op]);
 }
 
+class ParseError extends Error{};
+
+function* tokenize(input) {
+    let space = /\s*/;
+    let term = /\w(?:\w|\d)*|\d+|==|!=|\(|\)|:|".*?[^\\]"|'.*?[^\\]'/;
+
+    let initialLength = input.length;
+
+    while (input.length) {
+        // Skip spaces
+        let m = input.match(space);
+        if (m[0].length) {
+            let skip = m[0].length;
+            input = input.slice(skip);
+            if (!input.length) {
+                break;
+            }
+        }
+
+        //Match the next token
+        m = input.match(term);
+        if (!m) {
+            throw new ParseError(`Invalid input at character ${initialLength - input.length}`);
+        }
+        let token = m[0];
+        yield token;
+        input = input.slice(token.length);
+    }
+}
+
+const operatorTokens = new Set(["==", "!=", "in", "and", "or", "!", "not", ":"]);
+const unaryOperators = new Set(["!", "not"]);
+
+const precedenceGroups = [[":"], ["in", "==", "!="], ["not", "!"], ["and"], ["or"]];
+const operatorPrecedence = new Map();
+
+for (let [groupIdx, group] of precedenceGroups) {
+    for (let op of group) {
+        operatorPrecedence.set(op, precedenceGroups.length - groupIdx);
+    }
+}
+
+const operatorAliases = new Map(Object.entries({"!": "not"}));
+
+const defaultOperator = new Map(Object.entries({test: "in"}));
+
+
+class Node {
+}
+
+class UnaryOperatorNode extends Node {
+    constructor(operator) {
+        this.name = operator;
+        this.operand = null;
+    }
+
+    children() {
+        return [this.operand];
+    }
+
+}
+
+class BinaryOperatorNode extends Node {
+    constructor(operator) {
+        this.name = operator;
+        this.lhs = null;
+        this.rhs = null;
+    }
+}
+
+class ValueNode extends Node {
+    constructor(value) {
+        this.name = value;
+    }
+}
+
+function createOperatorNode(token) {
+    if (unaryOperators.has(token)) {
+        return new UnaryOperatorNode(token);
+    }
+    return new BinaryOperatorNode(token);
+}
+
+function transformDefaultOperator(operator) {
+    // The default operator creates a different kind of relation depending on the arguments
+    let op = "==";
+    if (defaultOperator.has(operator.lhs.name)) {
+        op = defaultOperator.get(operator.lhs.name);
+    }
+    operator.name = op;
+    return operator;
+}
+
+class Parser {
+    constructor() {
+        this.operators = [new Node()];
+        this.operands = [];
+    }
+
+    top() {
+        return this.operators.length ? this.operators[this.operators.length - 1] : null;
+    }
+
+    parse(tokens) {
+        for (let token of tokens) {
+            if (token === "(") {
+                this.operators.push(token);
+            } else if (token === ")") {
+                while(this.top() && this.top() !== "(") {
+                    this.apply();
+                }
+                if (!this.operators.length) {
+                    throw new ParseError("Mismatched parens");
+                }
+                this.operators.pop();
+            } else if (operatorTokens.has(token)) {
+
+                while (this.top() &&
+                       this.top() !== ")" &&
+                       this.precedence(this.top()) >= this.precedence(token)) {
+                    this.apply();
+                }
+                this.operators.push(createOperatorNode(token));
+            } else {
+                this.operands.push(new ValueNode(token));
+            }
+        }
+        while (this.operators.length) {
+            this.apply();
+        }
+        if (this.operands.length !== 1) {
+            throw new ParseError("Operands remaining at end of input");
+        }
+        return this.operands[0];
+    }
+
+    precedence(token) {
+        return operatorPrecedence.get(token);
+    }
+
+    apply() {
+        let operator = this.operators.pop();
+        if (unaryOperators.has(operator)) {
+            let operand = this.operands.pop();
+            operator.operand = operand;
+        } else {
+            let rhs = this.operands.pop();
+            let lhs = this.operands.pop();
+            operator.lhs = lhs;
+            operator.rhs = rhs;
+            if (operator.name == ":") {
+                operator = transformDefaultOperator(operator);
+            }
+        }
+        this.operands.push(operator);
+    }
+}

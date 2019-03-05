@@ -114,7 +114,7 @@ class ParseError extends Error{};
 
 function* tokenize(input) {
     let space = /\s*/;
-    let term = /\w(?:\w|\d|\.|_)*|\d+|==|!=|\(|\)|:|".*?[^\\]"|'.*?[^\\]'/;
+    let term = /\w(?:\w|\d|\.|_|-|+)*|\d+|==|!=|\(|\)|:|".*?[^\\]"|'.*?[^\\]'/;
 
     let initialLength = input.length;
 

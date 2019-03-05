@@ -23,16 +23,8 @@ export class Checkbox extends Component {
 }
 
 export class TextInput extends Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            value: this.props.value
-        };
-    }
-
     handleChange = (event) => {
         let value = event.target.value;
-        this.setState({value});
         this.props.onChange(value);
     }
 
@@ -40,7 +32,7 @@ export class TextInput extends Component {
         return (<input
                 name={this.props.name}
                 onChange={this.handleChange}
-                value={this.props.value}/>);
+                defaultValue={this.props.defaultValue}/>);
     }
 }
 

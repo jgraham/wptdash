@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
-import {filterCompiler} from './filter';
+import {filterCompiler, parseExpr} from './filter';
 import {Checkbox, TextInput, Select} from './form';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
@@ -153,9 +153,8 @@ class App extends Component {
         this.setState({errors});
     }
 
-    onFilterChange = (filter) => {
-        let filterFunc = filter ? filterCompiler(filter) : null;
-        this.setState({filter, filterFunc});
+    onFilterChange = (filterFunc) => {
+        this.setState({filterFunc});
       }
 
     async fetchData(url, retry, options={}) {
@@ -504,61 +503,136 @@ class BugComponentSelector extends Component {
 
 class Filter extends Component {
     types = new Map(Object.entries({none: {name: "None", filter: null},
-                                    untriaged: {name: "Untriaged", filter: {not: {has: "_geckoMetadata.bug"}}},
-                                    triaged: {name: "Triaged", filter: {has: "_geckoMetadata.bug"}},
+                                    untriaged: {name: "Untriaged", filter: "not has _geckoMetadata.bug"},
+                                    triaged: {name: "Triaged", filter: "has _geckoMetadata.bug"},
                                     custom: {name: "Custom…", filter: null}}));
 
     constructor(props) {
         super(props);
-        let [type, data] = this.getType();
-        this.state = {
-            type: type,
-            data: data
-        };
-        props.onChange(data);
+        let [type, expr] = this.getType();
+        this.state = {type, expr};
+        this.afterFilterUpdate();
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (prevState.type !== this.state.type ||
+            prevState.expr !== this.state.expr) {
+            this.afterFilterUpdate();
+        }
     }
 
     getType() {
         // TODO: Maybe this should be in the parent
-        let [type, data] = ["none", null];
+        let [type, expr] = ["none", null];
         let urlValue = urlParams.get("filter");
         if (urlValue) {
-            [type, data] = urlValue.split(":", 1);
+            let parts = urlValue.split(":");
+            type = parts[0];
+            expr = parts.slice(1).join(":");
         }
         if (!this.types.has(type)) {
             type = "none";
+            expr = null;
         }
         if (type !== "custom") {
-            data = this.types.get(type).filter;
+            expr = this.types.get(type).filter;
         }
-        return [type, data];
+        return [type, expr];
     }
 
     onTypeChange = (type) => {
+        if (!this.types.has(type)) {
+            return;
+        }
         this.setState({type: type});
-        let data;
+        let expr;
+        if (type === "custom") {
+            expr = this.state.expr;
+        } else {
+            expr = this.types.get(type).filter;
+        }
+        if (expr) {
+            this.props.onChange(filterCompiler(parseExpr(expr)));
+        }
+    }
+
+    onExprChange = (expr) => {
+        let ast;
+        clearTimeout(this.timer);
+        try {
+            ast = expr ? parseExpr(expr) : null;
+        } catch (e) {
+            this.timer = setTimeout(() => {
+                //TODO: Add UI errors for things that won't compile
+                console.log(e);
+            }, 1000);
+            return;
+        }
+        this.timer = setTimeout(() => {
+            let filter;
+            try {
+                filter = ast ? filterCompiler(ast) : null;
+            } catch(e) {
+                console.error(e);
+                return;
+            }
+            this.props.onChange(filter);
+            this.setState({expr});
+        }, 1000);
+    }
+
+    afterFilterUpdate() {
+        let type = this.state.type;
         if (type === "none") {
             urlParams.delete("filter");
-            data = null;
         } else if(type === "custom") {
-            let data = this.state.data;
-            urlParams.set("filter", `custom:${JSON.stringify(data)}`);
+            let expr = this.state.expr;
+            urlParams.set("filter", `custom:${expr}`);
         } else {
             urlParams.set("filter", type);
-            data = this.types.get(type).filter;
         }
-
-        this.props.onChange(data);
     }
 
     render() {
-        let triageText = `Triaged status is currently derived from a bug: annotation in
+        let triageText = <p className="note">
+                           Triaged status is currently derived from a bug: annotation in
 the gecko metadata on the test file (not on subtests). In the future this will change to
-include external annotations accessible to wpt.fyi`;
+include external annotations accessible to wpt.fyi.
+                         </p>;
         let optionText = {
             "triaged": triageText,
             "untriaged": triageText,
-            "custom": "UI for custom filters is not yet implemented"
+            "custom": (<div className="note">
+                         <p>
+                           Custom filters are boolean expressions with logical operators
+                           <code>and</code>, <code>or</code>, and <code>not</code>`,
+                           equality operators <code>{"=="}</code>, and <code>!=</code>
+                           and custom operators <code>in</code> for text substrings
+                           and <code>has</code> for testing if a field exists.
+                         </p>
+                         <p>
+                           Available fields are <code>test</code> for the test title and
+                           <code>_geckoMetadata</code> for fields set from gecko metadata
+                           Gecko metadata fields include <code>bug</code> and
+                           <code>lsan-allowed</code>
+                         </p>
+                         <p>
+                           The <code>:</code> operator performs a default operation depending
+                           on the selected field</p>
+                         <p>
+                           Examples:
+                         </p>
+                         <ul>
+                           <li><code>historical in test</code> - The test name contains
+                             the substring "historical"</li>
+                           <li><code>test:historical</code> - The test name contains
+                             the substring "historical"</li>
+                           <li><code>not has _geckoMetadata.bug</code> - Gecko metadata doesn't
+                             specify a bug field for the test</li>
+                           <li><code>not has _geckoMetadata.bug</code> - Gecko metadata doesn't
+                             specify a bug field for the test</li>
+                         </ul>
+                        </div>)
         };
         let options = Array.from(this.types).map(([value, {name}]) => ({value, name}));
         return (<section>
@@ -566,8 +640,10 @@ include external annotations accessible to wpt.fyi`;
                   <Select options={options}
                           value={this.state.type}
                           onChange={this.onTypeChange}/>
+                  {this.state.type === "custom" ? <TextInput onChange={this.onExprChange}
+                                                             defaultValue={this.state.expr}/> : null}
                   {optionText.hasOwnProperty(this.state.type) ?
-                   <p className="note">{optionText[this.state.type]}</p> : null}
+                   optionText[this.state.type] : null}
                 </section>);
     }
 }

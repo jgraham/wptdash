@@ -1,5 +1,3 @@
-import {enumerate} from './utils';
-
 class FilterError extends Error {};
 
 let handlers = {
@@ -25,15 +23,19 @@ let handlers = {
         return operators.or(...args);
     },
 
-    not: data => {
+    "==": (data)  => {
+        return operators["=="](data);
+    },
+
+    not: ([data]) => {
         return operators.not(filterCompiler(data));
     },
 
-    contains: (data) => {
-        return operators.contains(data);
+    in: (data) => {
+        return operators.in(data);
     },
 
-    has: data => {
+    has: ([data]) => {
         if (typeof data !== "string") {
             throw new FilterError("Argument to 'has' clause must be a string");
         }
@@ -52,19 +54,21 @@ let operators = {
         return (ctx) => args.some(x => x(ctx));
     },
 
+    "==": ([lhs, rhs]) => {
+        return lhs === rhs;
+    },
+
     not: (arg) => {
         return (ctx) => !arg(ctx);
     },
 
-    contains: (arg) => {
-        let key = Object.keys(arg)[0];
-        let value = arg[key];
+    in: ([lhs, rhs]) => {
         return (ctx) => {
-            let ctxValue = getValue(ctx, key);
+            let ctxValue = getValue(ctx, rhs);
             if (typeof ctxValue !== "string") {
                 throw new FilterError();
             }
-            return ctxValue.includes(value);
+            return ctxValue.includes(lhs);
         };
     },
 
@@ -95,10 +99,12 @@ function getValue(ctx, key) {
 export function filterCompiler(input) {
     let keys = Object.keys(input);
     if (keys.length !== 1) {
+        console.error(input);
         throw new FilterError("Can't handle an input with multiple keys");
     }
     let op = keys[0];
     if (!handlers.hasOwnProperty(op)) {
+        console.error(input);
         throw new FilterError(`Unknown operator ${op}`);
     }
     return handlers[op](input[op]);
@@ -108,7 +114,7 @@ class ParseError extends Error{};
 
 function* tokenize(input) {
     let space = /\s*/;
-    let term = /\w(?:\w|\d)*|\d+|==|!=|\(|\)|:|".*?[^\\]"|'.*?[^\\]'/;
+    let term = /\w(?:\w|\d|\.|_)*|\d+|==|!=|\(|\)|:|".*?[^\\]"|'.*?[^\\]'/;
 
     let initialLength = input.length;
 
@@ -134,13 +140,13 @@ function* tokenize(input) {
     }
 }
 
-const operatorTokens = new Set(["==", "!=", "in", "and", "or", "!", "not", ":"]);
-const unaryOperators = new Set(["!", "not"]);
+const operatorTokens = new Set(["==", "!=", "in", "and", "or", "!", "not", ":", "has"]);
+const unaryOperators = new Set(["!", "not", "has"]);
 
-const precedenceGroups = [[":"], ["in", "==", "!="], ["not", "!"], ["and"], ["or"]];
+const precedenceGroups = [[":"], ["in", "==", "!=", "has"], ["not", "!"], ["and"], ["or"]];
 const operatorPrecedence = new Map();
 
-for (let [groupIdx, group] of precedenceGroups) {
+for (let [groupIdx, group] of precedenceGroups.map((x, i) => [i, x])) {
     for (let op of group) {
         operatorPrecedence.set(op, precedenceGroups.length - groupIdx);
     }
@@ -152,31 +158,63 @@ const defaultOperator = new Map(Object.entries({test: "in"}));
 
 
 class Node {
+    constructor(name) {
+        this.name = name;
+    }
+
+    to_object() {
+        let obj = {};
+        obj[this.name] = this.children().map(x => x.to_object());
+        return obj;
+    }
 }
 
 class UnaryOperatorNode extends Node {
-    constructor(operator) {
-        this.name = operator;
+    constructor(name) {
+        if (!operatorTokens.has(name) || !unaryOperators.has(name)) {
+            throw new Error();
+        }
+        if (operatorAliases.has(name)) {
+            name = operatorAliases.get(name);
+        }
+
+        super(name);
         this.operand = null;
     }
 
     children() {
         return [this.operand];
     }
-
 }
 
 class BinaryOperatorNode extends Node {
-    constructor(operator) {
-        this.name = operator;
+    constructor(name) {
+        if (!operatorTokens.has(name) || unaryOperators.has(name)) {
+            throw new Error();
+        }
+        if (operatorAliases.has(name)) {
+            name = operatorAliases.get(name);
+        }
+
+        super(name);
         this.lhs = null;
         this.rhs = null;
+    }
+
+    children() {
+        return [this.lhs, this.rhs];
     }
 }
 
 class ValueNode extends Node {
-    constructor(value) {
-        this.name = value;
+    constructor(name) {
+        if (name[0] === "'" || name[0] === '"') {
+            name = name.slice(1, name.length - 1);
+        }
+        super(name);
+    }
+    to_object() {
+        return this.name;
     }
 }
 
@@ -194,12 +232,15 @@ function transformDefaultOperator(operator) {
         op = defaultOperator.get(operator.lhs.name);
     }
     operator.name = op;
+    if (op === "in") {
+        [operator.lhs, operator.rhs] = [operator.rhs, operator.lhs];
+    }
     return operator;
 }
 
 class Parser {
     constructor() {
-        this.operators = [new Node()];
+        this.operators = [];
         this.operands = [];
     }
 
@@ -212,7 +253,7 @@ class Parser {
             if (token === "(") {
                 this.operators.push(token);
             } else if (token === ")") {
-                while(this.top() && this.top() !== "(") {
+                while(this.top() !== null && this.top() !== "(") {
                     this.apply();
                 }
                 if (!this.operators.length) {
@@ -220,10 +261,9 @@ class Parser {
                 }
                 this.operators.pop();
             } else if (operatorTokens.has(token)) {
-
-                while (this.top() &&
+                while (this.top() !== null &&
                        this.top() !== ")" &&
-                       this.precedence(this.top()) >= this.precedence(token)) {
+                       this.precedence(this.top().name) >= this.precedence(token)) {
                     this.apply();
                 }
                 this.operators.push(createOperatorNode(token));
@@ -246,18 +286,30 @@ class Parser {
 
     apply() {
         let operator = this.operators.pop();
-        if (unaryOperators.has(operator)) {
+        if (unaryOperators.has(operator.name)) {
             let operand = this.operands.pop();
+            if (!operand) {
+                throw new Error();
+            }
             operator.operand = operand;
         } else {
             let rhs = this.operands.pop();
             let lhs = this.operands.pop();
+            if (!lhs || !rhs) {
+                throw new Error();
+            }
             operator.lhs = lhs;
             operator.rhs = rhs;
-            if (operator.name == ":") {
+            if (operator.name === ":") {
                 operator = transformDefaultOperator(operator);
             }
         }
         this.operands.push(operator);
     }
+}
+
+
+export function parseExpr(expr) {
+    let parser = new Parser();
+    return parser.parse(tokenize(expr)).to_object();
 }

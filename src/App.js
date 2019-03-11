@@ -235,7 +235,7 @@ class App extends Component {
     async loadGeckoMetadata() {
 //        let metadata = await this.loadTaskClusterData("index.gecko.v2.try.latest.source.source-wpt-metadata-summary",
 //                                                      "summary.json");
-        let metadata = await this.fetchData(`https://queue.taskcluster.net/v1/task/Ik2tnR1KQzi26GfvTQ2WHw/runs/0/artifacts/public/summary.json`,
+        let metadata = await this.fetchData(`https://queue.taskcluster.net/v1/task/YtpxIfHTR5CKgd4EfpkAQg/runs/0/artifacts/public/summary.json`,
                                             async () => this.loadGeckoMetadata());
         this.setState({geckoMetadata: metadata});
     }

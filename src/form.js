@@ -30,9 +30,10 @@ export class TextInput extends Component {
 
     render() {
         return (<input
-                name={this.props.name}
-                onChange={this.handleChange}
-                defaultValue={this.props.defaultValue}/>);
+                  name={this.props.name}
+                  onChange={this.handleChange}
+                  defaultValue={this.props.defaultValue}
+                  list={this.props.list}/>);
     }
 }
 
@@ -49,5 +50,14 @@ export class Select extends Component {
                   value={this.props.value}>
                   {selectItems}
                 </select>);
+    }
+}
+
+export class DataList extends Component {
+    render() {
+        let items = this.props.options.map(option => <option value={option} key={option}/>);
+        return (<datalist id={this.props.id}>
+                  {items}
+                </datalist>);
     }
 }

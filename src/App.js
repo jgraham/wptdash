@@ -23,11 +23,16 @@ function makeWptFyiUrl(path, params={}) {
                     ["product", "chrome[experimental]"],
                     ["product", "firefox[experimental]"],
                     ["product", "safari[experimental]"]];
+    params = new Map(Object.entries(params));
     for (let [key, value] of defaults) {
-        url.searchParams.append(key, value);
+        if (!params.has(key)) {
+            url.searchParams.append(key, value);
+        }
     }
-    for (let key of Object.keys(params)) {
-        let value = params[key];
+    for (let [key, value] of params) {
+        if (value === null || value === undefined) {
+            continue;
+        }
         if (Array.isArray(value)) {
             value.forEach(x => url.searchParams.append(key, x));
         } else {
@@ -128,6 +133,7 @@ class App extends Component {
             bugComponentsMap: new Map(),
             currentBugComponent: null,
             selectedPaths: new Set(),
+            runSha: null,
             wptRuns: null,
             geckoMetadata: {},
             geckoMetadataForPaths: {},
@@ -155,7 +161,11 @@ class App extends Component {
 
     onFilterChange = (filterFunc) => {
         this.setState({filterFunc});
-      }
+    }
+
+    onRunChange = (runSha) => {
+        this.setState({runSha});
+    }
 
     async fetchData(url, retry, options={}) {
         if (!options.hasOwnProperty("redirect")) {
@@ -227,9 +237,14 @@ class App extends Component {
     }
 
     async loadWptRunData() {
-        let runsUrl = makeWptFyiUrl("api/runs", {aligned: ""});
+        let params = {aligned: ""};
+        if (this.state.runSha) {
+            params["sha"] = this.state.runSha;
+        }
+        let runsUrl = makeWptFyiUrl("api/runs", params);
         let runs = await this.fetchData(runsUrl, async () => this.loadWptRunData());
-        this.setState({wptRuns: runs});
+        let runSha = runs[0].full_revision_hash;
+        this.setState({wptRuns: runs, runSha});
     }
 
     async loadGeckoMetadata() {
@@ -351,64 +366,75 @@ class App extends Component {
         this.setState({selectedPaths});
     }
 
-    componentDidUpdate(prevProps, prevState) {
+    async componentDidUpdate(prevProps, prevState) {
         if (prevState.geckoMetadata !== this.state.geckoMetadata ||
             !arraysEqual(prevState.selectedPaths, this.state.selectedPaths)) {
             this.filterGeckoMetadata();
+        }
+        if (prevState.runSha !== this.state.runSha) {
+            this.setState({loading_state: LOADING_STATE.LOADING});
+            await this.loadWptRunData();
+            this.setState({loading_state: LOADING_STATE.COMPLETE});
         }
     }
 
     render() {
         let paths = this.state.bugComponentsMap.get(this.state.currentBugComponent);
-        let body;
+        let body = [];
+        if (this.state.runSha) {
+            body.push(<section id="selector" key="selector">
+                        <RunInfo runSha={this.state.runSha}
+                                   onChange={this.onRunChange} />
+                        <BugComponentSelector onComponentChange={this.onComponentChange}
+                                              components={this.state.bugComponents}
+                                              value={this.state.currentBugComponent} />
+                          <Filter onChange={this.onFilterChange} />
+                          <TestPaths
+                            paths={paths}
+                            selectedPaths={this.state.selectedPaths}
+                            onChange={this.onPathsChange} />
+                        </section>);
+        }
         if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
-            body = <p>Loading…</p>;
+            body.push(<section id="details" key="details">
+                        <p>Loading…</p>
+                      </section>);
         } else {
-            body = [<section id="selector" key="selector">
-                      <RunInfo runs={this.state.wptRuns}/>
-                      <BugComponentSelector onComponentChange={this.onComponentChange}
-                                            components={this.state.bugComponents}
-                                            value={this.state.currentBugComponent} />
-                      <Filter onChange={this.onFilterChange} />
-                      <TestPaths
-                        paths={paths}
-                        selectedPaths={this.state.selectedPaths}
-                        onChange={this.onPathsChange} />
-                    </section>,
-                    <section id="details" key="details">
-                      <Tabs>
-                        <ResultsView label="Firefox-only Failures"
-                                     failsIn={["firefox"]}
-                                     passesIn={["safari", "chrome"]}
-                                     runs={this.state.wptRuns}
-                                     paths={Array.from(this.state.selectedPaths)}
-                                     geckoMetadata={this.state.pathMetadata}
-                                     onError={this.onError}
-                                     filter={this.state.filterFunc}>
-                          <h2>Firefox-only Failures</h2>
-                          <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
-                        </ResultsView>
-                        <ResultsView label="All Firefox Failures"
-                                     failsIn={["firefox"]}
-                                     passesIn={[]}
-                                     runs={this.state.wptRuns}
-                                     paths={Array.from(this.state.selectedPaths)}
-                                     geckoMetadata={this.state.pathMetadata}
-                                     onError={this.onError}
-                                     filter={this.state.filterFunc}>
-                          <h2>All Firefox Failures</h2>
-                          <p>Tests that fail in Firefox</p>
-                        </ResultsView>
-                        <GeckoData label="Gecko Data"
-                                   data={this.state.pathMetadata}
-                                   paths={Array.from(this.state.selectedPaths)}
-                                   onError={this.onError}>
-                          <h2>Gecko metadata</h2>
-                          <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
-                          <p>Note: this data is currently not kept up to date</p>
-                        </GeckoData>
-                      </Tabs>
-                    </section>];
+            body.push(
+                <section id="details" key="details">
+                  <Tabs>
+                    <ResultsView label="Firefox-only Failures"
+                                 failsIn={["firefox"]}
+                                 passesIn={["safari", "chrome"]}
+                                 runs={this.state.wptRuns}
+                                 paths={Array.from(this.state.selectedPaths)}
+                                 geckoMetadata={this.state.pathMetadata}
+                                 onError={this.onError}
+                                 filter={this.state.filterFunc}>
+                      <h2>Firefox-only Failures</h2>
+                      <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
+                    </ResultsView>
+                    <ResultsView label="All Firefox Failures"
+                                 failsIn={["firefox"]}
+                                 passesIn={[]}
+                                 runs={this.state.wptRuns}
+                                 paths={Array.from(this.state.selectedPaths)}
+                                 geckoMetadata={this.state.pathMetadata}
+                                 onError={this.onError}
+                                 filter={this.state.filterFunc}>
+                      <h2>All Firefox Failures</h2>
+                      <p>Tests that fail in Firefox</p>
+                    </ResultsView>
+                    <GeckoData label="Gecko Data"
+                               data={this.state.pathMetadata}
+                               paths={Array.from(this.state.selectedPaths)}
+                               onError={this.onError}>
+                      <h2>Gecko metadata</h2>
+                      <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
+                      <p>Note: this data is currently not kept up to date</p>
+                    </GeckoData>
+                  </Tabs>
+                </section>);
         }
         return (
             <div id="app">
@@ -465,16 +491,74 @@ class ErrorLine extends Component {
 }
 
 class RunInfo extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            editable: false,
+            newSha: null,
+            runShas: []
+        };
+    }
+
+    onInputChange = (value) => {
+        this.setState({newSha: value});
+    }
+
+    onEditClick = () => {
+        this.setState({editable: true});
+    }
+
+    onUpdateClick = () => {
+        this.props.onChange(this.state.newSha);
+        this.setState({editable: false});
+    }
+
+    async componentDidMount() {
+        let url = makeWptFyiUrl("/api/runs", {"max-count": "100"});
+        let runs = await fetchJson(url);
+        let browserRuns = new Map();
+        for (let run of runs) {
+            if (!browserRuns.has(run.revision)) {
+                browserRuns.set(run.revision, new Set());
+            }
+            browserRuns.get(run.revision).add(run.browser_name);
+        }
+        let runShas = [];
+        for (let run of runs) {
+            if (browserRuns.has(run.revision) && browserRuns.get(run.revision).size === 3) {
+                runShas.push(run.revision);
+            }
+            browserRuns.delete(run.revision);
+        }
+        this.setState({runShas});
+    }
+
     render() {
-        if (!this.props.runs) {
+        if (!this.props.runSha && !this.state.editable) {
             return null;
         }
-        let shortRev = this.props.runs[0].revision;
-        let longRev = this.props.runs[0].full_revision_hash;
-        let url = makeWptFyiUrl("", {sha: longRev});
+        let url = makeWptFyiUrl("", {sha: this.props.runSha});
         return (<dl>
-          <dt>wpt SHA1:</dt>
-          <dd><a href={url}>{shortRev}</a></dd>
+                  <dt>wpt SHA1:</dt>
+                  {this.state.editable ?
+                   (<dd>
+                      {this.state.runShas ?
+                       (<datalist id="runShasData">
+                          {this.state.runShas.map(x => <option key={x} value={x}/>)}
+                        </datalist>) : null}
+                      <TextInput defaultValue={this.props.runSha}
+                                 onChange={this.onInputChange}
+                                 list="runShasData"/>
+                       <button onClick={this.onUpdateClick}>
+                         Update
+                       </button>
+                    </dd>):
+                    (<dd>
+                       <a href={url}>{this.props.runSha.slice(0,12)}</a>
+                       <button onClick={this.onEditClick}>
+                         Edit
+                       </button>
+                     </dd>)}
         </dl>);
     }
 }
@@ -605,7 +689,7 @@ include external annotations accessible to wpt.fyi.
             "custom": (<div className="note">
                          <p>
                            Custom filters are boolean expressions with logical operators
-                           <code>and</code>, <code>or</code>, and <code>not</code>`,
+                           &nbsp;<code>and</code>, <code>or</code>, and <code>not</code>`,
                            equality operators <code>{"=="}</code>, and <code>!=</code>
                            and custom operators <code>in</code> for text substrings
                            and <code>has</code> for testing if a field exists.

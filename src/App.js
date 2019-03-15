@@ -800,9 +800,10 @@ class ResultsView extends Component {
         }
         for (let key of Object.keys(rv)) {
             if (urlParams.has(key)) {
-                let value = urlParams.get(key).split(",").filter(x => browsers.includes(x));
-                if (value.length) {
-                    rv[key] = value;
+                let value = urlParams.get(key);
+                let listValue = value.split(",").filter(x => browsers.includes(x));
+                if (!value.length || listValue.length) {
+                    rv[key] = listValue;
                 }
             }
         }
@@ -1075,9 +1076,17 @@ class ResultsViewSummary extends Component {
 
     render() {
         if (!this.state.editable) {
+            let text;
+            if (this.props.passesIn.length && this.props.failsIn.length) {
+                text = `Tests that pass in ${this.joinList(this.props.passesIn.map(x => capitalize(x)))}
+but not in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
+            } else if (this.props.passesIn.length) {
+                text = `Tests that pass in ${this.joinList(this.props.passesIn.map(x => capitalize(x)))}`;
+            } else {
+                text = `Tests that don't pass in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
+            }
             return (<p>
-                      Tests that pass in {this.joinList(this.props.passesIn.map(x => capitalize(x)))}
-                      &nbsp;but not in {this.joinList(this.props.failsIn.map(x => capitalize(x)))}
+                      {text}
                       &nbsp;
                       <button onClick={this.onEditClick}>
                         Edit
@@ -1110,7 +1119,7 @@ class ResultsViewSummary extends Component {
                       &nbsp;
                       <button
                         onClick={this.onUpdateClick}
-                        disabled={this.state.newPassesIn.length === 0 || this.state.newFailsIn.length === 0}>
+                        disabled={this.state.newPassesIn.length === 0 && this.state.newFailsIn.length === 0}>
                         Update
                       </button>
                     </p>);

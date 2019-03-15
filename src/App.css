@@ -139,3 +139,7 @@ ul.errors > li {
     font-weight: bold;
     padding-right: 0.5em;
 }
+
+select[multiple] {
+    vertical-align: text-top;
+}

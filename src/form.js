@@ -64,9 +64,10 @@ export class SelectMultiple extends Component {
                                                  {option.name}
                                                  </option>);
         return (<select
-                multiple
-                onChange={this.handleChange}>
-                {selectItems}
+                  size="3"
+                  multiple
+                  onChange={this.handleChange}>
+                  {selectItems}
                 </select>);
     }
 }

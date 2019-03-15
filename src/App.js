@@ -1095,14 +1095,14 @@ class ResultsViewSummary extends Component {
                 selected: this.props.failsIn.includes(x)
             };});
             return (<p>Tests that
-                      &nbsp;<label>pass in
+                      &nbsp;<label>pass in&nbsp;
                         <SelectMultiple
                           onChange={(data) => this.onSelectChange(data, "passesIn")}
                           options={passInOptions}/>
                       </label>
                       &nbsp;but
                       <label>
-                        &nbsp;not in
+                        &nbsp;not in&nbsp;
                         <SelectMultiple
                           onChange={(data) => this.onSelectChange(data, "failsIn")}
                           options={failInOptions}/>

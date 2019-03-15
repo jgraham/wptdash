@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 import {filterCompiler, parseExpr} from './filter';
-import {Checkbox, TextInput, Select} from './form';
+import {Checkbox, TextInput, Select, SelectMultiple} from './form';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
@@ -10,6 +10,8 @@ const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
 const WPT_FYI_BASE = "https://wpt.fyi";
 
 const passStatuses = new Set(["PASS", "OK"]);
+
+const browsers = ["chrome", "firefox", "safari"];
 
 const LOADING_STATE = Object.freeze({
     NONE: 0,
@@ -403,27 +405,13 @@ class App extends Component {
             body.push(
                 <section id="details" key="details">
                   <Tabs>
-                    <ResultsView label="Firefox-only Failures"
-                                 failsIn={["firefox"]}
-                                 passesIn={["safari", "chrome"]}
+                    <ResultsView label="Interop Comparison"
                                  runs={this.state.wptRuns}
                                  paths={Array.from(this.state.selectedPaths)}
                                  geckoMetadata={this.state.pathMetadata}
                                  onError={this.onError}
                                  filter={this.state.filterFunc}>
-                      <h2>Firefox-only Failures</h2>
-                      <p>Tests that pass in Chrome and Safari but fail in Firefox.</p>
-                    </ResultsView>
-                    <ResultsView label="All Firefox Failures"
-                                 failsIn={["firefox"]}
-                                 passesIn={[]}
-                                 runs={this.state.wptRuns}
-                                 paths={Array.from(this.state.selectedPaths)}
-                                 geckoMetadata={this.state.pathMetadata}
-                                 onError={this.onError}
-                                 filter={this.state.filterFunc}>
-                      <h2>All Firefox Failures</h2>
-                      <p>Tests that fail in Firefox</p>
+                      <h2>Interop Comparison</h2>
                     </ResultsView>
                     <GeckoData label="Gecko Data"
                                data={this.state.pathMetadata}
@@ -790,12 +778,35 @@ class TestPaths extends Component {
 class ResultsView extends Component {
     constructor(props) {
         super(props);
+        this.defaultBrowsers = {
+            failsIn: ["firefox"],
+            passesIn: ["chrome", "safari"]
+        };
+        let comparison = this.getComparison();
         this.state = {
             loading_state: LOADING_STATE.NONE,
             results: [],
             filter: null,
-            filteredResults: null
+            filteredResults: null,
+            passesIn: comparison.passesIn,
+            failsIn: comparison.failsIn,
         };
+    }
+
+    getComparison() {
+        let rv = {};
+        for (let [key, value] of Object.entries(this.defaultBrowsers)) {
+            rv[key] = value.slice();
+        }
+        for (let key of Object.keys(rv)) {
+            if (urlParams.has(key)) {
+                let value = urlParams.get(key).split(",").filter(x => browsers.includes(x));
+                if (value.length) {
+                    rv[key] = value;
+                }
+            }
+        }
+        return rv;
     }
 
     buildQuery() {
@@ -807,7 +818,7 @@ class ResultsView extends Component {
         };
         let topAndClause = query.query.and;
 
-        for (let browser of this.props.failsIn) {
+        for (let browser of this.state.failsIn) {
             for (let status of passStatuses) {
                 topAndClause.push({not : {
                     browser_name: browser,
@@ -816,7 +827,7 @@ class ResultsView extends Component {
             }
         }
 
-        for (let browser of this.props.passesIn) {
+        for (let browser of this.state.passesIn) {
             let target;
             if (passStatuses.size > 1) {
                 let orClause = {or: []};
@@ -924,57 +935,71 @@ class ResultsView extends Component {
         this.setState({filteredResults});
     }
 
+    onBrowserChange = (passesIn, failsIn) => {
+        this.setState({passesIn, failsIn});
+        for (let [key, values] of [["passesIn", passesIn],
+                                   ["failsIn", failsIn]]) {
+            values = values.sort();
+            if (!arraysEqual(values, this.defaultBrowsers[key])) {
+                urlParams.set(key, values.join(","));
+            } else {
+                urlParams.delete(key);
+            }
+        }
+    }
+
     render() {
+        let data;
         if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
-            return (<div>
-                      {this.props.children}
+           data = (<div>
                       <p>Loading…</p>
                     </div>);
-        }
-        if (this.state.results === null) {
-            return (<div>
-                      {this.props.children}
+        } else if (this.state.results === null) {
+            data = (<div>
                       <p>Load failed</p>
                     </div>);
-        }
-        if (!this.state.results.results.length) {
-            return (<div>
-                      {this.props.children}
+        } else if (!this.state.results.results.length) {
+            data = (<div>
                       <p>No results</p>
                     </div>);
+        } else {
+            let results = this.state.filteredResults ? this.state.filteredResults : [];
+            let testItems = results.map(result => (<TestItem
+                                                     failsIn={this.state.failsIn}
+                                                     passesIn={this.state.passesIn}
+                                                     runs={this.props.runs}
+                                                     result={result}
+                                                     key={result.test}
+                                                     geckoMetadata={result.test._geckoMetadata || new Map()}
+                                                     onError={this.props.onError}/>));
+            testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
+            data = [(<p>{results.length} top-level tests with
+                       &nbsp;{results
+                              .map(x => x.legacy_status[0].total)
+                              .reduce((x,y) => x+y, 0)} subtests</p>),
+                    <ul>{testItems}</ul>];
         }
-        let results = this.state.filteredResults ? this.state.filteredResults : [];
-        let testItems = results.map(result => (<TestItem
-                                                 failsIn={this.props.failsIn}
-                                                 passesIn={this.props.passesIn}
-                                                 runs={this.props.runs}
-                                                 result={result}
-                                                 key={result.test}
-                                                 geckoMetadata={result.test._geckoMetadata || new Map()}
-                                                 onError={this.props.onError}/>));
-        testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
         return (<div>
                   {this.props.children}
-                  <p>{results.length} top-level tests with
-                    &nbsp;{results
-                     .map(x => x.legacy_status[0].total)
-                     .reduce((x,y) => x+y, 0)} subtests</p>
-                  <ul>{testItems}</ul>
+                  <ResultsViewSummary failsIn={this.state.failsIn}
+                                      passesIn={this.state.passesIn}
+                                      onChange={this.onBrowserChange}/>
+                  {data}
                 </div>);
     }
 
     async componentDidMount() {
-        await this.fetchIfPossible({});
+        await this.fetchIfPossible({}, {});
     }
 
     async componentDidUpdate(prevProps, prevState) {
-        await this.fetchIfPossible(prevProps);
+        await this.fetchIfPossible(prevProps, prevState);
         if (prevState.filter !== this.state.filter) {
             this.updateFilteredResults();
         }
     }
 
-    async fetchIfPossible(prevProps) {
+    async fetchIfPossible(prevProps, prevState) {
         if (this.state.loading_state === LOADING_STATE.LOADING) {
             return;
         }
@@ -986,8 +1011,8 @@ class ResultsView extends Component {
         }
         if (this.state.loading_state === LOADING_STATE.COMPLETE &&
             this.props.paths === prevProps.paths &&
-            this.props.failsIn === prevProps.failsIn &&
-            this.props.passesIn === prevProps.passesIn) {
+            this.state.failsIn === prevState.failsIn &&
+            this.state.passesIn === prevState.passesIn) {
             return;
         }
         if (!this.props.paths.length) {
@@ -999,6 +1024,97 @@ class ResultsView extends Component {
                        loading_state: LOADING_STATE.LOADING});
         await this.fetchResults();
         this.updateFilteredResults();
+    }
+}
+
+class ResultsViewSummary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            editable: false,
+            newPassesIn: this.props.passesIn,
+            newFailsIn: this.props.failsIn,
+        };
+    }
+
+    joinList(items) {
+        if (!items.length) {
+            return "";
+        }
+        if (items.length === 1) {
+            return items[0];
+        }
+        let commaSeparated = items.slice(0, items.length - 1).join(", ");
+        return `${commaSeparated}, and ${items[items.length - 1]}`;
+    }
+
+    onEditClick = () => {
+        this.setState({editable: true});
+    }
+
+    onSelectChange = (data, type) => {
+        let key;
+        let state = {};
+        if (type === "passesIn") {
+            key = "newPassesIn";
+        } else if (type === "failsIn") {
+            key = "newFailsIn";
+        } else {
+            console.error(`Unknown key ${type}`);
+        }
+        console.log(type, key, data);
+        state[key] = data;
+        this.setState(state);
+    }
+
+    onUpdateClick = () => {
+        console.log(this.state.newPassesIn, this.state.newFailsIn);
+        this.props.onChange(this.state.newPassesIn, this.state.newFailsIn);
+        this.setState({editable: false});
+    }
+
+    render() {
+        if (!this.state.editable) {
+            return (<p>
+                      Tests that pass in {this.joinList(this.props.passesIn.map(x => capitalize(x)))}
+                      &nbsp;but not in {this.joinList(this.props.failsIn.map(x => capitalize(x)))}
+                      &nbsp;
+                      <button onClick={this.onEditClick}>
+                        Edit
+                      </button>
+                    </p>);
+        } else {
+            let passInOptions = browsers.map(x => {return {
+                value: x,
+                name: capitalize(x),
+                selected: this.props.passesIn.includes(x)
+            };});
+            let failInOptions = browsers.map(x => {return {
+                value: x,
+                name: capitalize(x),
+                selected: this.props.failsIn.includes(x)
+            };});
+            return (<p>Tests that
+                      &nbsp;<label>pass in
+                        <SelectMultiple
+                          onChange={(data) => this.onSelectChange(data, "passesIn")}
+                          options={passInOptions}/>
+                      </label>
+                      &nbsp;but
+                      <label>
+                        &nbsp;not in
+                        <SelectMultiple
+                          onChange={(data) => this.onSelectChange(data, "failsIn")}
+                          options={failInOptions}/>
+                      </label>
+                      &nbsp;
+                      <button
+                        onClick={this.onUpdateClick}
+                        disabled={this.state.newPassesIn.length === 0 || this.state.newFailsIn.length === 0}>
+                        Update
+                      </button>
+                    </p>);
+        }
     }
 }
 

@@ -53,6 +53,24 @@ export class Select extends Component {
     }
 }
 
+export class SelectMultiple extends Component {
+    handleChange = (event) => {
+        let selectedOptions = event.target.selectedOptions;
+        this.props.onChange([].map.call(selectedOptions, x => x.value));
+    }
+
+    render() {
+        let selectItems = this.props.options.map(option => <option value={option.value} key={option.value} selected={option.selected}>
+                                                 {option.name}
+                                                 </option>);
+        return (<select
+                multiple
+                onChange={this.handleChange}>
+                {selectItems}
+                </select>);
+    }
+}
+
 export class DataList extends Component {
     render() {
         let items = this.props.options.map(option => <option value={option} key={option}/>);

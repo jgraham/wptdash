@@ -543,6 +543,7 @@ class RunInfo extends Component {
                     </dd>):
                     (<dd>
                        <a href={url}>{this.props.runSha.slice(0,12)}</a>
+                       &nbsp;&nbsp;
                        <button onClick={this.onEditClick}>
                          Edit
                        </button>

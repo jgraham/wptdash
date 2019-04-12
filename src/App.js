@@ -250,10 +250,8 @@ class App extends Component {
     }
 
     async loadGeckoMetadata() {
-//        let metadata = await this.loadTaskClusterData("index.gecko.v2.try.latest.source.source-wpt-metadata-summary",
-//                                                      "summary.json");
-        let metadata = await this.fetchData(`https://queue.taskcluster.net/v1/task/YtpxIfHTR5CKgd4EfpkAQg/runs/0/artifacts/public/summary.json`,
-                                            async () => this.loadGeckoMetadata());
+        let metadata = await this.loadTaskClusterData("gecko.v2.mozilla-central.latest.source.source-wpt-metadata-summary",
+                                                      "summary.json");
         this.setState({geckoMetadata: metadata});
     }
 
@@ -975,11 +973,11 @@ class ResultsView extends Component {
                                                      geckoMetadata={result.test._geckoMetadata || new Map()}
                                                      onError={this.props.onError}/>));
             testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
-            data = [(<p>{results.length} top-level tests with
+            data = [(<p key="desc">{results.length} top-level tests with
                        &nbsp;{results
                               .map(x => x.legacy_status[0].total)
                               .reduce((x,y) => x+y, 0)} subtests</p>),
-                    <ul>{testItems}</ul>];
+                    <ul key="data">{testItems}</ul>];
         }
         return (<div>
                   {this.props.children}

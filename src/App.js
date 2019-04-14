@@ -753,11 +753,13 @@ class TestPaths extends Component {
         }
         let listItems = this.props.paths.sort().map(path => (
             <li key={path}>
-              <Checkbox
-                checked={this.props.selectedPaths.has(path)}
-                value={path}
-                onCheckboxChange={this.onCheckboxChange} />
-              {path}
+              <label>
+                <Checkbox
+                  checked={this.props.selectedPaths.has(path)}
+                  value={path}
+                  onCheckboxChange={this.onCheckboxChange} />
+                {path}
+              </label>
             </li>));
         return (<section>
                   <h2>Test Paths</h2>

@@ -1062,13 +1062,11 @@ class ResultsViewSummary extends Component {
         } else {
             console.error(`Unknown key ${type}`);
         }
-        console.log(type, key, data);
         state[key] = data;
         this.setState(state);
     }
 
     onUpdateClick = () => {
-        console.log(this.state.newPassesIn, this.state.newFailsIn);
         this.props.onChange(this.state.newPassesIn, this.state.newFailsIn);
         this.setState({editable: false});
     }
@@ -1383,42 +1381,38 @@ class ResultCell extends Component {
 
 class GeckoData extends Component {
     groupData() {
-        let disabled = new Map();
-        let lsan = new Map();
-        let crashes = new Map();
-
+        let disabled = {unconditional: new Map(), conditional: new Map()};
+        let lsan = {unconditional: new Map(), conditional: new Map()};
+        let crashes = {unconditional: new Map(), conditional: new Map()};
+        let set = (key, data, dest, mapFn) => {
+            let destKey;
+            if (!data || !data.length) {
+                return;
+            }
+            destKey = (data.length === 1 && data[0][0] == null) ? "unconditional": "conditional";
+            if (mapFn) {
+                data = data.map(mapFn);
+            }
+            dest[destKey].set(key, data);
+        };
         for (let [dir, dirData] of Object.entries(this.props.data)) {
-            if (dirData.disabled) {
-                disabled.set(dir, dirData.disabled);
-            }
-            if (dirData['lsan-allowed']) {
-                lsan.set(dir, dirData['lsan-allowed']);
-            }
-            if (dirData.expected_CRASH) {
-                crashes.set(dir, dirData.expected_CRASH.map(cond => [cond, null]));
-            }
+            set(dir, dirData.disabled, disabled);
+            set(dir, dirData['lsan-allowed'], lsan);
+            set(dir, dirData.expected_CRASH, crashes, cond => [cond, null]);
             if (!dirData._tests) {
                 continue;
             }
             for (let [test, testData] of Object.entries(dirData._tests)) {
                 let testKey = `${dir}/${test}`;
-                if (testData.disabled) {
-                    disabled.set(testKey, testData.disabled);
-                }
-                if (testData.expected_CRASH) {
-                    crashes.set(testKey, testData.expected_CRASH.map(cond => [cond, null]));
-                }
+                set(testKey, testData.disabled, disabled);
+                set(testKey, testData.expected_CRASH, crashes, cond => [cond, null]);
                 if (!testData._subtests) {
                     continue;
                 }
                 for (let [subtest, subtestData] of Object.entries(testData._subtests)) {
                     let subtestKey = `${dir}/${test} | ${subtest}`;
-                    if (subtestData.disabled) {
-                        disabled.set(subtestKey, subtestData.disabled);
-                    }
-                    if (subtestData.expected_CRASH) {
-                        crashes.set(subtestKey, subtestData.expected_CRASH.map(cond => [cond, null]));
-                    }
+                    set(subtestKey, subtestData.disabled, disabled);
+                    set(subtestKey, subtestData.expected_CRASH, crashes, cond => [cond, null]);
                 }
             }
         }
@@ -1426,73 +1420,72 @@ class GeckoData extends Component {
     }
 
     render() {
-        let content;
-        if (this.props.data === null) {
-            content = <p>Loading</p>;
-        } else {
-            content = [];
-            let byType = this.groupData();
-            if (byType.crashes) {
-                let items = [];
-                for (let [test, values] of iterMapSorted(byType.crashes)) {
-                    items.push(<GeckoMetadataLine
-                                 key={test}
-                                 title={test}
-                                 values={values}
-                                 render={value => null}/>);
-                }
-                if (items.length) {
-                    content.push(<section key="crashes">
-                                   <h2>Crashes</h2>
-                                   <p>{items.length} tests crash in some configurations</p>
-                                   <ul>{items}</ul>
-                                 </section>);
-                }
-            }
-            if (byType.disabled) {
-                let items = [];
-                for (let [test, values] of iterMapSorted(byType.disabled)) {
-                    items.push(<GeckoMetadataLine
-                                 key={test}
-                                 title={test}
-                                 values={values}
-                                 render={value => <MaybeBugLink value={value} />}/>);
-                }
-                if (items.length) {
-                    content.push(<section key="disabled">
-                                   <h2>Disabled</h2>
-                                   <p>{items.length} tests are disabled in some configurations</p>
-                                   <ul>{items}</ul>
-                                 </section>);
-                }
-            }
-            if (byType.lsan) {
-                let items = [];
-                for (let [test, values] of iterMapSorted(byType.lsan)) {
-                    items.push(<GeckoMetadataLine
-                                 key={test}
-                                 title={test}
-                                 values={values}
-                                 render={value => <LsanListValue value={value}/>} />);
-                }
-                if (items.length) {
-                    content.push(<section key="lsan">
-                                   <h2>LSAN Failures</h2>
-                                   <p>{items.length} directories have LSAN failures</p>
-                                   <ul>{items}</ul>
-                                 </section>);
-                }
-            }
+        if (!this.props.data) {
+            return <p>Loading</p>;
+        }
+        let byType = this.groupData();
+        if (byType === null ||
+            !Object.values(byType).some(typeValues => Object.values(typeValues).some(x => x.size > 0))) {
             return (<section>
-                      {this.props.children}
-                      {content.length ? content : <p>No metadata available</p>}
-                    </section>);
+                      <h2>Gecko metadata</h2>
+                      <p>None</p>
+                      </section>);
         }
         return (<section>
                   <h2>Gecko metadata</h2>
-                  <p>None</p>
+                  <GeckoDataSection
+                    key="crashes"
+                    data={byType.crashes}
+                    render={value => null}
+                    title="Crashes"
+                    desc="tests crash" />
+                  <GeckoDataSection
+                    key="disabled"
+                    data={byType.disabled}
+                    render={value => <MaybeBugLink value={value} />}
+                    title="Disabled"
+                    desc="tests are disabled" />
+                  <GeckoDataSection
+                    key="lsan"
+                    data={byType.lsan}
+                    render={value => <LsanListValue value={value}/>}
+                    title="LSAN Failures"
+                    desc="directories have LSAN failures"/>
                 </section>);
     }
+}
+
+
+class GeckoDataSection extends Component {
+    render() {
+        let {conditional, unconditional} = this.props.data;
+        if (!conditional.size && unconditional.size) {
+            return null;
+        }
+        let count = 0;
+        let items = [];
+        for (let [type, typeData] of [["In all configurations", unconditional],
+                                      ["In some configurations", conditional]]) {
+            if (!typeData.size) {
+                continue;
+            }
+            items.push(<h4 key={type}>{type}</h4>);
+            for (let [test, values] of iterMapSorted(typeData)) {
+                count++;
+                items.push(<GeckoMetadataLine
+                             key={test}
+                             title={test}
+                             values={values}
+                             render={this.props.render}/>);
+            }
+        }
+        return (<section>
+                  <h3>{this.props.title}</h3>
+                  <p>{count} {this.props.desc}</p>
+                  <ul>{items}</ul>
+                </section>);
+    }
+
 }
 
 class GeckoMetadataLine extends Component {

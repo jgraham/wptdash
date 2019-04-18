@@ -383,16 +383,19 @@ class App extends Component {
         let body = [];
         if (this.state.runSha) {
             body.push(<section id="selector" key="selector">
-                        <RunInfo runSha={this.state.runSha}
+                        <dl>
+                          <RunInfo runSha={this.state.runSha}
                                    onChange={this.onRunChange} />
-                        <BugComponentSelector onComponentChange={this.onComponentChange}
-                                              components={this.state.bugComponents}
-                                              value={this.state.currentBugComponent} />
+                          <BrowserInfo runs={this.state.wptRuns} />
+                          <BugComponentSelector onComponentChange={this.onComponentChange}
+                                                components={this.state.bugComponents}
+                                                value={this.state.currentBugComponent} />
                           <Filter onChange={this.onFilterChange} />
                           <TestPaths
                             paths={paths}
                             selectedPaths={this.state.selectedPaths}
                             onChange={this.onPathsChange} />
+                        </dl>
                         </section>);
         }
         if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
@@ -524,29 +527,45 @@ class RunInfo extends Component {
             return null;
         }
         let url = makeWptFyiUrl("", {sha: this.props.runSha});
-        return (<dl>
-                  <dt>wpt SHA1:</dt>
-                  {this.state.editable ?
-                   (<dd>
+        return [<dt key="term">wpt SHA1:</dt>,
+                this.state.editable ?
+                 (<dd key="value">
                       {this.state.runShas ?
                        (<datalist id="runShasData">
                           {this.state.runShas.map(x => <option key={x} value={x}/>)}
                         </datalist>) : null}
-                      <TextInput defaultValue={this.props.runSha}
-                                 onChange={this.onInputChange}
-                                 list="runShasData"/>
-                       <button onClick={this.onUpdateClick}>
-                         Update
-                       </button>
-                    </dd>):
-                    (<dd>
-                       <a href={url}>{this.props.runSha.slice(0,12)}</a>
-                       &nbsp;&nbsp;
-                       <button onClick={this.onEditClick}>
-                         Edit
-                       </button>
-                     </dd>)}
-        </dl>);
+                    <TextInput defaultValue={this.props.runSha}
+                               onChange={this.onInputChange}
+                               list="runShasData"/>
+                    <button onClick={this.onUpdateClick}>
+                      Update
+                    </button>
+                  </dd>):
+                 (<dd key="value">
+                    <a href={url}>{this.props.runSha.slice(0,12)}</a>
+                    &nbsp;&nbsp;
+                    <button onClick={this.onEditClick}>
+                      Edit
+                    </button>
+                  </dd>
+                 )];
+    }
+}
+
+class BrowserInfo extends Component {
+    render() {
+        if (!this.props.runs) {
+            return null;
+        }
+        let browsers = this.props.runs.map(run => {
+            return (<li key={run.browser_name}>
+               {capitalize(run.browser_name)} {run.browser_version} ({run.os_name})
+             </li>);
+        });
+        return [<dt key="term">Browsers:</dt>,
+                (<dd key="value">
+                   <ul>{browsers}</ul>
+                 </dd>)];
     }
 }
 
@@ -562,13 +581,13 @@ class BugComponentSelector extends Component {
         if (!this.props.value) {
             return null;
         }
-        return (<section>
-                  <label>Bug Component: </label>
-                  <Select
-                    onChange={this.handleChange}
-                    value={this.props.value}
-                    options={options}/>
-                </section>);
+        return [<dt key="term">Bug Component:</dt>,
+                (<dd key="value">
+                   <Select
+                     onChange={this.handleChange}
+                     value={this.props.value}
+                     options={options}/>
+                 </dd>)];
     }
 }
 
@@ -706,16 +725,16 @@ include external annotations accessible to wpt.fyi.
                         </div>)
         };
         let options = Array.from(this.types).map(([value, {name}]) => ({value, name}));
-        return (<section>
-                  <label>Filter:</label>
-                  <Select options={options}
-                          value={this.state.type}
-                          onChange={this.onTypeChange}/>
-                  {this.state.type === "custom" ? <TextInput onChange={this.onExprChange}
-                                                             defaultValue={this.state.expr}/> : null}
-                  {optionText.hasOwnProperty(this.state.type) ?
-                   optionText[this.state.type] : null}
-                </section>);
+        return [<dt key="term">Filter:</dt>,
+                (<dd key="value">
+                   <Select options={options}
+                           value={this.state.type}
+                           onChange={this.onTypeChange}/>
+                   {this.state.type === "custom" ? <TextInput onChange={this.onExprChange}
+                                                              defaultValue={this.state.expr}/> : null}
+                   {optionText.hasOwnProperty(this.state.type) ?
+                    optionText[this.state.type] : null}
+                 </dd>)];
     }
 }
 
@@ -759,17 +778,17 @@ class TestPaths extends Component {
                 onCheckboxChange={this.onCheckboxChange} />
               {path}
             </li>));
-        return (<section>
-                  <h2>Test Paths</h2>
-                  <button
-                    onClick={this.onUpdateClick}
-                    disabled={setsEqual(this.state.paths, this.props.selectedPaths)}>
-                    Update
-                  </button>
-                  <ul id="test-paths">
-                    {listItems}
-                  </ul>
-                </section>);
+        return [<dt key="term">Test Paths</dt>,
+                (<dd key="value">
+                   <button
+                     onClick={this.onUpdateClick}
+                     disabled={setsEqual(this.state.paths, this.props.selectedPaths)}>
+                     Update
+                   </button>
+                   <ul id="test-paths">
+                     {listItems}
+                   </ul>
+                </dd>)];
     }
 }
 

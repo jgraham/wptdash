@@ -2,7 +2,7 @@
     font-family: "fira sans";
     display: grid;
     grid-template-rows: auto auto;
-    grid-template-columns: 20em auto;
+    grid-template-columns: 23em auto;
     grid-template-areas: "header header"
                          "sidebar main";
 }

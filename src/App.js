@@ -1467,7 +1467,7 @@ class GeckoData extends Component {
                   <GeckoDataSection
                     key="lsan"
                     data={byType.lsan}
-                    render={value => <LsanListValue value={value}/>}
+                    render={value => <LsanListValue value={value} />}
                     title="LSAN Failures"
                     desc="directories have LSAN failures"/>
                 </section>);
@@ -1478,7 +1478,7 @@ class GeckoData extends Component {
 class GeckoDataSection extends Component {
     render() {
         let {conditional, unconditional} = this.props.data;
-        if (!conditional.size && unconditional.size) {
+        if (!conditional.size && !unconditional.size) {
             return null;
         }
         let count = 0;

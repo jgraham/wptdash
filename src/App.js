@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 import {filterCompiler, parseExpr} from './filter';
-import {Checkbox, TextInput, Select, SelectMultiple} from './form';
+import {Checkbox, CheckboxMultiple, TextInput, Select, SelectMultiple} from './form';
 
 const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
 const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
@@ -1127,7 +1127,7 @@ but not in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
             };});
             return (<p>Tests that
                       &nbsp;<label>pass in&nbsp;
-                        <SelectMultiple
+                        <CheckboxMultiple
                           onChange={(data) => this.onSelectChange(data, "passesIn")}
                           options={passInOptions}/>
                       </label>
@@ -1456,6 +1456,7 @@ class GeckoData extends Component {
                       <p>None</p>
                       </section>);
         }
+        console.log(byType);
         return (<section>
                   <h2>Gecko metadata</h2>
                   <GeckoDataSection
@@ -1551,6 +1552,7 @@ class MaybeBugLink extends Component {
 
 class LsanListValue extends Component {
     render() {
+        console.log(this.props.value);
         if (Array.isArray(this.props.value)) {
             let frames = this.props.value.map(x => <li key={x}><code>{x}</code></li>);
             return (<ul>{frames}</ul>);

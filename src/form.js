@@ -60,15 +60,54 @@ export class SelectMultiple extends Component {
     }
 
     render() {
-        let selectItems = this.props.options.map(option => <option value={option.value} key={option.value} selected={option.selected}>
-                                                 {option.name}
-                                                 </option>);
+        let selectItems = this.props.options.map(option => (
+            <option value={option.value}
+                    key={option.value}
+                    selected={option.selected}>
+              {option.name}
+            </option>));
         return (<select
                   size="3"
                   multiple
                   onChange={this.handleChange}>
                   {selectItems}
                 </select>);
+    }
+}
+
+export class CheckboxMultiple extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            selected: new Map()
+        };
+    }
+
+    handleChange = (name, is_selected) => {
+        let selected = new Map(this.state.selected.entries());
+        selected.set(name, is_selected);
+        this.setState({selected});
+        this.props.onChange(Array.from(selected.entries()));
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (this.props === prevProps) {
+            return;
+        }
+        let selected = new Map(this.props.options.map(option => [option.name,
+                                                                 option.selected]));
+        this.setState({selected});
+    }
+
+    render() {
+        return this.props.options.map(option => (
+            <label>
+              <Checkbox name={option.value}
+                        key={option.value}
+                        checked={option.selected}
+                        onCheckboxChange={this.handleChange} />
+              {option.value}
+            </label>));
     }
 }
 

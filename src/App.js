@@ -45,7 +45,11 @@ function makeWptFyiUrl(path, params={}) {
 }
 
 function capitalize(str) {
-    return str && str[0].toUpperCase() + str.slice(1);
+    if (str) {
+        return str && str[0].toUpperCase() + str.slice(1);
+    } else {
+        return "";
+    }
 }
 
 class FetchError extends Error {

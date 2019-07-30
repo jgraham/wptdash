@@ -147,6 +147,7 @@ class App extends Component {
             loading_state: LOADING_STATE.NONE,
             filter: null,
             filterFunc: null,
+            queryTerms: [],
         };
     }
 
@@ -165,8 +166,8 @@ class App extends Component {
         this.setState({errors});
     }
 
-    onFilterChange = (filterFunc) => {
-        this.setState({filterFunc});
+    onFilterChange = (filterFunc, queryTerms) => {
+        this.setState({filterFunc, queryTerms});
     }
 
     onRunChange = (runSha) => {
@@ -415,7 +416,8 @@ class App extends Component {
                                  paths={Array.from(this.state.selectedPaths)}
                                  geckoMetadata={this.state.pathMetadata}
                                  onError={this.onError}
-                                 filter={this.state.filterFunc}>
+                                 filter={this.state.filterFunc}
+                                 queryTerms={this.state.queryTerms}>
                       <h2>Interop Comparison</h2>
                     </ResultsView>
                     <GeckoData label="Gecko Data"
@@ -597,9 +599,11 @@ class BugComponentSelector extends Component {
 
 class Filter extends Component {
     types = new Map(Object.entries({none: {name: "None", filter: null},
-                                    untriaged: {name: "Untriaged", filter: "not has _geckoMetadata.bug"},
-                                    triaged: {name: "Triaged", filter: "has _geckoMetadata.bug"},
-                                    custom: {name: "Custom…", filter: null}}));
+                                    untriaged: {name: "Untriaged", filter: null,
+                                                queryTerms: [{not: {link: "bugzilla.mozilla.org"}}]},
+                                    triaged: {name: "Triaged", filter: null,
+                                              queryTerms: [{link: "bugzilla.mozilla.org"}]},
+                                    custom: {name: "Custom…", filter: null, queryTerms: []}}));
 
     constructor(props) {
         super(props);
@@ -640,14 +644,19 @@ class Filter extends Component {
         }
         this.setState({type: type});
         let expr;
+        let queryTerms = [];
         if (type === "custom") {
             expr = this.state.expr;
         } else {
-            expr = this.types.get(type).filter;
+            let typeData = this.types.get(type);
+            expr = typeData.filter;
+            queryTerms = typeData.queryTerms || [];
         }
+        let filter;
         if (expr) {
-            this.props.onChange(filterCompiler(parseExpr(expr)));
+            filter = filterCompiler(parseExpr(expr));
         }
+        this.props.onChange(filter, queryTerms);
     }
 
     onExprChange = (expr) => {
@@ -670,7 +679,7 @@ class Filter extends Component {
                 console.error(e);
                 return;
             }
-            this.props.onChange(filter);
+            this.props.onChange(filter, []);
             this.setState({expr});
         }, 1000);
     }
@@ -689,9 +698,8 @@ class Filter extends Component {
 
     render() {
         let triageText = <p className="note">
-                           Triaged status is currently derived from a bug: annotation in
-the gecko metadata on the test file (not on subtests). In the future this will change to
-include external annotations accessible to wpt.fyi.
+                           Triaged status is determined by a bugzilla link for the test in the&nbsp;
+                           <a href="https://github.com/web-platform-tests/wpt-metadata">wpt-metadata</a> repository.
                          </p>;
         let optionText = {
             "triaged": triageText,
@@ -875,6 +883,11 @@ class ResultsView extends Component {
         } else {
             topAndClause.push({pattern: this.props.paths[0]});
         }
+
+        for (let term of this.props.queryTerms) {
+            topAndClause.push(term);
+        }
+
         return query;
     }
 

@@ -1420,6 +1420,7 @@ class ResultCell extends Component {
 class GeckoData extends Component {
     groupData() {
         let disabled = {unconditional: new Map(), conditional: new Map()};
+        let intermittent = {unconditional: new Map(), conditional: new Map()};
         let lsan = {unconditional: new Map(), conditional: new Map()};
         let crashes = {unconditional: new Map(), conditional: new Map()};
         let set = (key, data, dest, mapFn) => {
@@ -1443,6 +1444,7 @@ class GeckoData extends Component {
             for (let [test, testData] of Object.entries(dirData._tests)) {
                 let testKey = `${dir}/${test}`;
                 set(testKey, testData.disabled, disabled);
+                set(testKey, testData.intermittent, intermittent);
                 set(testKey, testData.expected_CRASH, crashes, cond => [cond, null]);
                 if (!testData._subtests) {
                     continue;
@@ -1450,11 +1452,12 @@ class GeckoData extends Component {
                 for (let [subtest, subtestData] of Object.entries(testData._subtests)) {
                     let subtestKey = `${dir}/${test} | ${subtest}`;
                     set(subtestKey, subtestData.disabled, disabled);
+                    set(subtestKey, subtestData.intermittent, intermittent);
                     set(subtestKey, subtestData.expected_CRASH, crashes, cond => [cond, null]);
                 }
             }
         }
-        return {disabled, lsan, crashes};
+        return {disabled, intermittent, lsan, crashes};
     }
 
     render() {
@@ -1483,6 +1486,12 @@ class GeckoData extends Component {
                     render={value => <MaybeBugLink value={value} />}
                     title="Disabled"
                     desc="tests are disabled" />
+                  <GeckoDataSection
+                    key="intermittent"
+                    data={byType.intermittent}
+                    render={value => <StatusListValue value={value} />}
+                    title="Intermittent"
+                    desc="tests are intermittent" />
                   <GeckoDataSection
                     key="lsan"
                     data={byType.lsan}
@@ -1567,6 +1576,17 @@ class LsanListValue extends Component {
         if (Array.isArray(this.props.value)) {
             let frames = this.props.value.map(x => <li key={x}><code>{x}</code></li>);
             return (<ul>{frames}</ul>);
+        }
+        return this.props.value;
+    }
+}
+
+class StatusListValue extends Component {
+    render() {
+        if (Array.isArray(this.props.value)) {
+            let statuses = this.props.value.map(x => <code>{x}</code>)
+                .reduce((prev, current) => prev.length ? prev.concat([", ", current]) : [current], []);
+            return (<code>{statuses}</code>);
         }
         return this.props.value;
     }

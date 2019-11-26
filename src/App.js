@@ -4,8 +4,8 @@ import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './util
 import {filterCompiler, parseExpr} from './filter';
 import {Checkbox, TextInput, Select, SelectMultiple} from './form';
 
-const TASK_INDEX_BASE = "https://index.taskcluster.net/v1/task";
-const TASK_QUEUE_BASE = "https://queue.taskcluster.net/v1/task";
+const TASK_INDEX_BASE = "https://firefox-ci-tc.services.mozilla.com/api/index/v1";
+const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/";
 
 const WPT_FYI_BASE = "https://wpt.fyi";
 

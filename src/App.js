@@ -5,7 +5,7 @@ import {filterCompiler, parseExpr} from './filter';
 import {Checkbox, TextInput, Select, SelectMultiple} from './form';
 
 const TASK_INDEX_BASE = "https://firefox-ci-tc.services.mozilla.com/api/index/v1";
-const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/";
+const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
 
 const WPT_FYI_BASE = "https://wpt.fyi";
 
@@ -188,10 +188,10 @@ class App extends Component {
 
     async loadTaskClusterData(indexName, artifactName) {
         let retry = async () => await this.loadTaskClusterData(indexName, artifactName);
-        let taskData = await this.fetchData(`${TASK_INDEX_BASE}/${indexName}`,
+        let taskData = await this.fetchData(`${TASK_INDEX_BASE}/task/${indexName}`,
                                             retry);
         let taskId = taskData.taskId;
-        let taskStatus = await this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/status`,
+        let taskStatus = await this.fetchData(`${TASK_QUEUE_BASE}/task/${taskId}/status`,
                                               retry);
         let runId;
         for (let run of reversed(taskStatus.status.runs)) {
@@ -200,10 +200,10 @@ class App extends Component {
                 break;
             }
         }
-        let artifacts = await this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts`,
+        let artifacts = await this.fetchData(`${TASK_QUEUE_BASE}/task/${taskId}/runs/${runId}/artifacts`,
                                              retry);
         let artifactData = artifacts.artifacts.find(artifact => artifact.name.endsWith(artifactName));
-        return this.fetchData(`${TASK_QUEUE_BASE}/${taskId}/runs/${runId}/artifacts/${artifactData.name}`,
+        return this.fetchData(`${TASK_QUEUE_BASE}/task/${taskId}/runs/${runId}/artifacts/${artifactData.name}`,
                               retry);
     }
 

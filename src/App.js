@@ -144,7 +144,11 @@ class App extends Component {
             geckoMetadata: {},
             geckoMetadataForPaths: {},
             errors: [],
-            loading_state: LOADING_STATE.NONE,
+            haveData: {
+                bugComponent: false,
+                geckoMetadata: false,
+                wptRun: false,
+            },
             filter: null,
             filterFunc: null,
             queryTerms: [],
@@ -209,6 +213,7 @@ class App extends Component {
 
     async loadBugComponentData() {
         // TODO - Error handling
+        this.setState({haveData: {...this.state.haveData, bugComponent: false}});
         let componentData = await this.loadTaskClusterData("gecko.v2.mozilla-central.latest.source.source-bugzilla-info",
                                                            "components-normalized.json");
 
@@ -241,9 +246,11 @@ class App extends Component {
             selectedPaths = new Set(Array.from(selectedPaths).filter(x => urlPaths.has(x)));
         }
         this.setState({selectedPaths, currentBugComponent});
+        this.setState({haveData: {...this.state.haveData, bugComponent: true}});
     }
 
     async loadWptRunData() {
+        this.setState({haveData: {...this.state.haveData, wptRun: false}});
         let params = {aligned: ""};
         if (this.state.runSha) {
             params["sha"] = this.state.runSha;
@@ -252,22 +259,23 @@ class App extends Component {
         let runs = await this.fetchData(runsUrl, async () => this.loadWptRunData());
         let runSha = runs[0].full_revision_hash;
         this.setState({wptRuns: runs, runSha});
+        this.setState({haveData: {...this.state.haveData, wptRun: true}});
     }
 
     async loadGeckoMetadata() {
+        this.setState({haveData: {...this.state.haveData, geckoMetadata: false}});
         let metadata = await this.loadTaskClusterData("gecko.v2.mozilla-central.latest.source.source-wpt-metadata-summary",
                                                       "summary.json");
         this.setState({geckoMetadata: metadata});
+        this.setState({haveData: {...this.state.haveData, geckoMetadata: true}});
     }
 
     async componentDidMount() {
-        this.setState({loading_state: LOADING_STATE.LOADING});
         let bugComponentPromise = this.loadBugComponentData();
         let wptRunDataPromise = this.loadWptRunData();
         let geckoMetadataPromise = this.loadGeckoMetadata();
 
         await Promise.all([bugComponentPromise, wptRunDataPromise, geckoMetadataPromise]);
-        this.setState({loading_state: LOADING_STATE.COMPLETE});
     }
 
     filterGeckoMetadata() {
@@ -377,9 +385,7 @@ class App extends Component {
             this.filterGeckoMetadata();
         }
         if (prevState.runSha !== this.state.runSha) {
-            this.setState({loading_state: LOADING_STATE.LOADING});
             await this.loadWptRunData();
-            this.setState({loading_state: LOADING_STATE.COMPLETE});
         }
     }
 
@@ -403,7 +409,7 @@ class App extends Component {
                         </dl>
                         </section>);
         }
-        if (this.state.loading_state !== LOADING_STATE.COMPLETE) {
+        if (Object.values(this.state.haveData).includes(false)) {
             body.push(<section id="details" key="details">
                         <p>Loading…</p>
                       </section>);

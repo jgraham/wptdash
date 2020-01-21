@@ -147,3 +147,13 @@ ul.errors > li {
 select[multiple] {
     vertical-align: text-top;
 }
+
+ul.links {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+ul.links > li {
+    margin-right: 1em;
+}

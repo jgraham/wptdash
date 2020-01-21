@@ -1310,16 +1310,15 @@ class TestDetails extends Component {
                                                                            results={results}
                                                                            geckoMetadata={subtestMetadata.get(subtest)} />));
         return (<div>
-                  <ul>
-                    <li><a href={`http://w3c-test.org${this.props.test}`}>Live test</a></li>
-                    <li><a href={makeWptFyiUrl(`results/${this.props.test}`)}>wpt.fyi</a></li>
-                    <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${testToPath(this.props.test)}.ini`}>Gecko Metadata</a></li>
-                  </ul>
                   <MetaSummary
                     test={this.props.test}
                     data={this.props.geckoMetadata}/>
                   <section>
-                    <h3>Results</h3>
+                    <ul className="links">
+                      <li><a href={`http://wpt.live${this.props.test}`}>View Test</a></li>
+                      <li><a href={makeWptFyiUrl(`results/${this.props.test}`)}>All Results</a></li>
+                      <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${testToPath(this.props.test)}.ini`}>Gecko Metadata</a></li>
+                    </ul>
                     <table className="results">
                       <thead>
                         <tr>

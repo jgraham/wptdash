@@ -23,6 +23,10 @@ section#details {
     grid-area: main;
 }
 
+section#selector select {
+    max-width: calc(100% - 1em);
+}
+
 ul {
     display: block;
     list-style: none;

@@ -1,8 +1,9 @@
 import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
-import {filterCompiler, parseExpr} from './filter';
 import {Checkbox, TextInput, Select, SelectMultiple} from './form';
+import {Filter} from './filterselector';
+import {urlParams} from './urlparams';
 
 const TASK_INDEX_BASE = "https://firefox-ci-tc.services.mozilla.com/api/index/v1";
 const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
@@ -71,39 +72,6 @@ async function fetchJson(url, options) {
     return await resp.json();
 }
 
-class UrlParams {
-    constructor() {
-        this.url = new URL(window.location);
-        this.params = this.url.searchParams;
-    }
-
-    _update() {
-        window.history.replaceState({}, document.title, this.url.href);
-    }
-
-    get(name) {
-        return this.params.get(name);
-    }
-
-    has(name) {
-        return this.params.has(name);
-    }
-
-    set(name, value) {
-        this.params.set(name, value);
-        this._update();
-    }
-
-    delete(name) {
-        this.params.delete(name);
-        this._update();
-    }
-
-    append(name, value) {
-        this.params.append(name, value);
-        this._update();
-    }
-}
 
 const anyRe = /^(.*\.any)(:?\..*)\.html$/;
 const workerRe = /^(.*\.(:?worker|window))\.html$/;
@@ -120,8 +88,6 @@ function testToPath(test) {
     }
     return path;
 }
-
-const urlParams = new UrlParams();
 
 let makeError = (() => {
     let id = -1;
@@ -419,7 +385,7 @@ class App extends Component {
                   <Tabs>
                     <ResultsView label="Interop Comparison"
                                  runs={this.state.wptRuns}
-                                 paths={Array.from(this.state.selectedPaths)}
+                                 paths={this.state.selectedPaths}
                                  geckoMetadata={this.state.pathMetadata}
                                  onError={this.onError}
                                  filter={this.state.filterFunc}
@@ -428,7 +394,7 @@ class App extends Component {
                     </ResultsView>
                     <GeckoData label="Gecko Data"
                                data={this.state.pathMetadata}
-                               paths={Array.from(this.state.selectedPaths)}
+                               paths={this.state.selectedPaths}
                                onError={this.onError}>
                       <h2>Gecko metadata</h2>
                       <p>Gecko metadata in <code>testing/web-platform/meta</code> taken from latest mozilla-central.</p>
@@ -603,159 +569,6 @@ class BugComponentSelector extends Component {
     }
 }
 
-class Filter extends Component {
-    types = new Map(Object.entries({none: {name: "None", filter: null},
-                                    untriaged: {name: "Untriaged", filter: null,
-                                                queryTerms: [{not: {link: "bugzilla.mozilla.org"}}]},
-                                    triaged: {name: "Triaged", filter: null,
-                                              queryTerms: [{link: "bugzilla.mozilla.org"}]},
-                                    custom: {name: "Custom…", filter: null, queryTerms: []}}));
-
-    constructor(props) {
-        super(props);
-        let [type, expr] = this.getType();
-        this.state = {type, expr};
-        this.afterFilterUpdate();
-    }
-
-    componentDidUpdate(prevProps, prevState) {
-        if (prevState.type !== this.state.type ||
-            prevState.expr !== this.state.expr) {
-            this.afterFilterUpdate();
-        }
-    }
-
-    getType() {
-        // TODO: Maybe this should be in the parent
-        let [type, expr] = ["none", null];
-        let urlValue = urlParams.get("filter");
-        if (urlValue) {
-            let parts = urlValue.split(":");
-            type = parts[0];
-            expr = parts.slice(1).join(":");
-        }
-        if (!this.types.has(type)) {
-            type = "none";
-            expr = null;
-        }
-        if (type !== "custom") {
-            expr = this.types.get(type).filter;
-        }
-        return [type, expr];
-    }
-
-    onTypeChange = (type) => {
-        if (!this.types.has(type)) {
-            return;
-        }
-        this.setState({type: type});
-        let expr;
-        let queryTerms = [];
-        if (type === "custom") {
-            expr = this.state.expr;
-        } else {
-            let typeData = this.types.get(type);
-            expr = typeData.filter;
-            queryTerms = typeData.queryTerms || [];
-        }
-        let filter;
-        if (expr) {
-            filter = filterCompiler(parseExpr(expr));
-        }
-        this.props.onChange(filter, queryTerms);
-    }
-
-    onExprChange = (expr) => {
-        let ast;
-        clearTimeout(this.timer);
-        try {
-            ast = expr ? parseExpr(expr) : null;
-        } catch (e) {
-            this.timer = setTimeout(() => {
-                //TODO: Add UI errors for things that won't compile
-                console.log(e);
-            }, 1000);
-            return;
-        }
-        this.timer = setTimeout(() => {
-            let filter;
-            try {
-                filter = ast ? filterCompiler(ast) : null;
-            } catch(e) {
-                console.error(e);
-                return;
-            }
-            this.props.onChange(filter, []);
-            this.setState({expr});
-        }, 1000);
-    }
-
-    afterFilterUpdate() {
-        let type = this.state.type;
-        if (type === "none") {
-            urlParams.delete("filter");
-        } else if(type === "custom") {
-            let expr = this.state.expr;
-            urlParams.set("filter", `custom:${expr}`);
-        } else {
-            urlParams.set("filter", type);
-        }
-    }
-
-    render() {
-        let triageText = <p className="note">
-                           Triaged status is determined by a bugzilla link for the test in the&nbsp;
-                           <a href="https://github.com/web-platform-tests/wpt-metadata">wpt-metadata</a> repository.
-                         </p>;
-        let optionText = {
-            "triaged": triageText,
-            "untriaged": triageText,
-            "custom": (<div className="note">
-                         <p>
-                           Custom filters are boolean expressions with logical operators
-                           &nbsp;<code>and</code>, <code>or</code>, and <code>not</code>`,
-                           equality operators <code>{"=="}</code>, and <code>!=</code>
-                           and custom operators <code>in</code> for text substrings
-                           and <code>has</code> for testing if a field exists.
-                         </p>
-                         <p>
-                           Available fields are <code>test</code> for the test title and
-                           <code>_geckoMetadata</code> for fields set from gecko metadata
-                           Gecko metadata fields include <code>bug</code> and
-                           <code>lsan-allowed</code>
-                         </p>
-                         <p>
-                           The <code>:</code> operator performs a default operation depending
-                           on the selected field</p>
-                         <p>
-                           Examples:
-                         </p>
-                         <ul>
-                           <li><code>historical in test</code> - The test name contains
-                             the substring "historical"</li>
-                           <li><code>test:historical</code> - The test name contains
-                             the substring "historical"</li>
-                           <li><code>not has _geckoMetadata.bug</code> - Gecko metadata doesn't
-                             specify a bug field for the test</li>
-                           <li><code>not has _geckoMetadata.bug</code> - Gecko metadata doesn't
-                             specify a bug field for the test</li>
-                         </ul>
-                        </div>)
-        };
-        let options = Array.from(this.types).map(([value, {name}]) => ({value, name}));
-        return [<dt key="term">Filter:</dt>,
-                (<dd key="value">
-                   <Select options={options}
-                           value={this.state.type}
-                           onChange={this.onTypeChange}/>
-                   {this.state.type === "custom" ? <TextInput onChange={this.onExprChange}
-                                                              defaultValue={this.state.expr}/> : null}
-                   {optionText.hasOwnProperty(this.state.type) ?
-                    optionText[this.state.type] : null}
-                 </dd>)];
-    }
-}
-
 class TestPaths extends Component {
     constructor(props) {
         super(props);
@@ -884,10 +697,11 @@ class ResultsView extends Component {
             }
         }
 
-        if (this.props.paths.length > 1) {
-            topAndClause.push({"or": this.props.paths.map(path => {return {pattern: path + "/"};})});
+        let paths = Array.from(this.props.paths);
+        if (paths.length > 1) {
+            topAndClause.push({"or": paths.map(path => {return {pattern: path + "/"};})});
         } else {
-            topAndClause.push({pattern: this.props.paths[0]});
+            topAndClause.push({pattern: paths[0]});
         }
 
         for (let term of this.props.queryTerms) {
@@ -918,7 +732,7 @@ class ResultsView extends Component {
         // The search for paths is "contains" so filter to only paths that start with the relevant
         // directories
 
-        let pathRe = new RegExp(this.props.paths.map(path => `^${path}/`).join("|"));
+        let pathRe = new RegExp(Array.from(this.props.paths).map(path => `^${path}/`).join("|"));
         results.results = results.results.filter(result => pathRe.test(result.test));
 
         // TODO: should be able to do this more efficiently
@@ -1056,10 +870,11 @@ class ResultsView extends Component {
         if (this.state.loading_state === LOADING_STATE.COMPLETE &&
             this.props.paths === prevProps.paths &&
             this.state.failsIn === prevState.failsIn &&
-            this.state.passesIn === prevState.passesIn) {
+            this.state.passesIn === prevState.passesIn &&
+            this.props.queryTerms === prevProps.queryTerms) {
             return;
         }
-        if (!this.props.paths.length) {
+        if (!this.props.paths.size) {
             this.setState({results: {results: []},
                            loading_state: LOADING_STATE.COMPLETE});
             return;

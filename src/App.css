@@ -157,3 +157,21 @@ ul.links {
 ul.links > li {
     margin-right: 1em;
 }
+
+section#metadata {
+    background-color: lightyellow;
+    position: sticky;
+    bottom: 0;
+    border-top: medium solid grey;
+    width: 100%;
+    max-height: 150px;
+}
+
+section#metadata > div {
+    display:flex;
+}
+
+section#metadata > div > details {
+    width: 100%;
+    overflow: scroll;
+}

@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import './App.css';
 import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 import {Checkbox, TextInput, Select, SelectMultiple} from './form';
+import {MetadataEditor} from './metaeditor';
 import {Filter} from './filterselector';
 import {urlParams} from './urlparams';
 
@@ -19,6 +20,8 @@ const LOADING_STATE = Object.freeze({
     LOADING: 1,
     COMPLETE: 2
 });
+
+const bugLinkRe = /https?:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=(\d+)/;
 
 function makeWptFyiUrl(path, params={}) {
     let url = new URL(`${WPT_FYI_BASE}/${path}`);
@@ -107,17 +110,20 @@ class App extends Component {
             selectedPaths: new Set(),
             runSha: null,
             wptRuns: null,
+            wptMetadata: null,
             geckoMetadata: {},
-            geckoMetadataForPaths: {},
+            pathGeckoMetadata: {},
             errors: [],
             haveData: {
                 bugComponent: false,
                 geckoMetadata: false,
+                wptMetadata: false,
                 wptRun: false,
             },
             filter: null,
             filterFunc: null,
             queryTerms: [],
+            metadataPendingChanges: new Map(),
         };
     }
 
@@ -142,6 +148,114 @@ class App extends Component {
 
     onRunChange = (runSha) => {
         this.setState({runSha});
+    }
+
+    onMetadataPendingSubmit = async () => {
+        let isMatch = (item, change) => (item.product === "firefox" &&
+                                         item.url === change.url &&
+                                         item.subtest === change.subtest &&
+                                         item.status === change.status);
+
+
+        console.log(this.state.metadataPendingChanges);
+        let changedMeta = {};
+        for (let [test, changes] of this.state.metadataPendingChanges) {
+            // Flatten out the metadata
+            let meta = [];
+            let prevMetadata = this.state.wptMetadata[test];
+            if (prevMetadata) {
+                for (let item of prevMetadata) {
+                    if (item.results) {
+                        for (let result of item.results) {
+                            meta.push({...item, ...result});
+                        }
+                    } else {
+                        meta.push({...item});
+                    }
+                }
+            }
+
+            for (let change of changes) {
+                if (change.change === "REMOVE") {
+                    meta = meta.filter(item => !isMatch(item, change));
+                } else if (change.change === "ADD") {
+                    if (!meta.some(item => isMatch(item, change))) {
+                        let newMeta = {product: "firefox",
+                                       url: change.url};
+                        if (change.subtest) {
+                            newMeta.subtest = change.subtest;
+                        }
+                        if (change.status) {
+                            newMeta.status = change.status;
+                        }
+                        meta.push(newMeta);
+                    }
+                }
+            }
+            console.log("meta", meta);
+            changedMeta[test] = [];
+            // Now unflatten the metadata
+            let index = new Map();
+            for (let newMeta of meta) {
+                let key = [newMeta.product, newMeta.url].join(",");
+                if (!index.has(key)) {
+                    index.set(key, changedMeta[test].length);
+                    changedMeta[test].push({product: newMeta.product, url:newMeta.url});
+                }
+                if (newMeta.subtest || newMeta.status) {
+                    let item = changedMeta[test][index.get(key)];
+                    if (!item.results) {
+                        item.results = [];
+                    }
+                    let result = {};
+                    if (newMeta.subtest) {
+                        result.subtest = {};
+                    }
+                    if (newMeta.status) {
+                        result.status = newMeta.status;
+                    }
+                    item.results.push(result);
+                }
+            }
+        }
+        await this.patchMetadata(changedMeta);
+        this.setState({metadataPendingChanges: new Map()});
+    }
+
+    onMetadataPendingCancel = () => {
+        this.setState({metadataPendingChanges: new Map()});
+    }
+
+    onMetadataChange = (change) => {
+        console.log("onMetadataChange", change);
+        let metadataPendingChanges = new Map(this.state.metadataPendingChanges);
+        if (!metadataPendingChanges.has(change.test)) {
+            metadataPendingChanges.set(change.test, []);
+        }
+        // TODO: consolidate changes
+        metadataPendingChanges.get(change.test).push(change);
+        this.setState({metadataPendingChanges});
+    }
+
+    async patchMetadata(data) {
+        let body = JSON.stringify(data);
+        if (window.location.hostname !== "jgraham.github.io") {
+            this.onError(new Error(`Unable to submit data from ${window.location.hostname}`), {});
+            console.error(data);
+            return null;
+        }
+        let url = makeWptFyiUrl("api/metadata", {"product": "firefox"});
+        const response = await fetch(url, {
+            method: 'PATCH',
+            mode: 'cors',
+            cache: 'no-cache',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body
+        });
+        return await response.json();
     }
 
     async fetchData(url, retry, options={}) {
@@ -228,6 +342,15 @@ class App extends Component {
         this.setState({haveData: {...this.state.haveData, wptRun: true}});
     }
 
+    async loadWptMetadata() {
+        this.setState({haveData: {...this.state.haveData, wptMetadata: false}});
+        let params = {"product": ["firefox"]};
+        let metaUrl = makeWptFyiUrl("api/metadata", params);
+        let metadata = await this.fetchData(metaUrl, async () => this.loadWptMetadata());
+        this.setState({wptMetadata: metadata});
+        this.setState({haveData: {...this.state.haveData, wptMetadata: true}});
+    }
+
     async loadGeckoMetadata() {
         this.setState({haveData: {...this.state.haveData, geckoMetadata: false}});
         let metadata = await this.loadTaskClusterData("gecko.v2.mozilla-central.latest.source.source-wpt-metadata-summary",
@@ -237,11 +360,10 @@ class App extends Component {
     }
 
     async componentDidMount() {
-        let bugComponentPromise = this.loadBugComponentData();
-        let wptRunDataPromise = this.loadWptRunData();
-        let geckoMetadataPromise = this.loadGeckoMetadata();
-
-        await Promise.all([bugComponentPromise, wptRunDataPromise, geckoMetadataPromise]);
+        await Promise.all([this.loadBugComponentData(),
+                           this.loadWptRunData(),
+                           this.loadWptMetadata(),
+                           this.loadGeckoMetadata()]);
     }
 
     filterGeckoMetadata() {
@@ -272,7 +394,7 @@ class App extends Component {
             }
         }
 
-        this.setState({pathMetadata: data});
+        this.setState({pathGeckoMetadata: data});
     }
 
     processComponentData(componentData) {
@@ -386,14 +508,16 @@ class App extends Component {
                     <ResultsView label="Interop Comparison"
                                  runs={this.state.wptRuns}
                                  paths={this.state.selectedPaths}
-                                 geckoMetadata={this.state.pathMetadata}
+                                 geckoMetadata={this.state.pathGeckoMetadata}
+                                 wptMetadata={this.state.wptMetadata}
                                  onError={this.onError}
                                  filter={this.state.filterFunc}
-                                 queryTerms={this.state.queryTerms}>
+                                 queryTerms={this.state.queryTerms}
+                                 onMetadataChange={this.onMetadataChange}>
                       <h2>Interop Comparison</h2>
                     </ResultsView>
                     <GeckoData label="Gecko Data"
-                               data={this.state.pathMetadata}
+                               data={this.state.pathGeckoMetadata}
                                paths={this.state.selectedPaths}
                                onError={this.onError}>
                       <h2>Gecko metadata</h2>
@@ -401,6 +525,9 @@ class App extends Component {
                       <p>Note: this data is currently not kept up to date</p>
                     </GeckoData>
                   </Tabs>
+                  <MetadataEditor changes={this.state.metadataPendingChanges}
+                                  onSubmit={this.onMetadataPendingSubmit}
+                                  onCancel={this.onMetadataPendingCancel} />
                 </section>);
         }
         return (
@@ -427,6 +554,7 @@ class ErrorArea extends Component {
         }
         let errorLines = [];
         for (let [idx, error] of enumerate(this.props.errors)) {
+            console.log(error);
             errorLines.push(<ErrorLine
                               key={`error-${error.id}`}
                               error={error}
@@ -736,12 +864,31 @@ class ResultsView extends Component {
         results.results = results.results.filter(result => pathRe.test(result.test));
 
         // TODO: should be able to do this more efficiently
-        results.results.forEach(result => result._geckoMetadata = this.getMetadata(result.test));
+        results.results.forEach(result => {
+            result._wptMetadata = this.getWptMetadata(result.test);
+            result._geckoMetadata = this.getGeckoMetadata(result.test);
+        });
 
         this.setState({results, loading_state: LOADING_STATE.COMPLETE});
     }
 
-    getMetadata(test) {
+    getWptMetadata(test) {
+        let metadata = new Map();
+        if (this.props.wptMetadata[test]) {
+            for (let meta of this.props.wptMetadata[test]) {
+                let metaEntry = {...meta};
+                let product = metaEntry.product;
+                delete metaEntry.product;
+                if (!metadata.has(product)) {
+                    metadata.set(product, []);
+                }
+                metadata.get(product).push(metaEntry);
+            }
+        }
+        return metadata;
+    }
+
+    getGeckoMetadata(test) {
         let metadata = new Map();
         let dirParts = test.split("/");
         let testName = dirParts[dirParts.length - 1];
@@ -828,7 +975,9 @@ class ResultsView extends Component {
                                                      runs={this.props.runs}
                                                      result={result}
                                                      key={result.test}
-                                                     geckoMetadata={result.test._geckoMetadata || new Map()}
+                                                     geckoMetadata={result._geckoMetadata || new Map()}
+                                                     wptMetadata={result._wptMetadata}
+                                                     onMetadataChange={this.props.onMetadataChange}
                                                      onError={this.props.onError}/>));
             testItems.sort((a,b) => (a.key > b.key ? 1 : (a.key === b.key ? 0 : -1)));
             data = [(<p key="desc">{results.length} top-level tests with
@@ -1023,7 +1172,9 @@ class TestItem extends Component {
                     passesIn={this.props.passesIn}
                     failsIn={this.props.failsIn}
                     geckoMetadata={this.props.geckoMetadata}
-                    onError={this.props.onError} />
+                    wptMetadata={this.props.wptMetadata}
+                    onError={this.props.onError}
+                    onMetadataChange={this.props.onMetadataChange} />
             </TreeRow>
         );
     }
@@ -1127,18 +1278,25 @@ class TestDetails extends Component {
         let resultRows = this.state.results.map(([subtest, results]) => (<ResultRow
                                                                            key={subtest}
                                                                            runs={this.props.runs}
+                                                                           test={this.props.test}
                                                                            subtest={subtest}
                                                                            results={results}
-                                                                           geckoMetadata={subtestMetadata.get(subtest)} />));
+                                                                           geckoMetadata={subtestMetadata.get(subtest)}
+                                                                           wptMetadata={this.props.wptMetadata}
+                                                                           onMetadataChange={this.props.onMetadataChange} />));
         return (<div>
-                  <MetaSummary
-                    test={this.props.test}
-                    data={this.props.geckoMetadata}/>
                   <section>
                     <ul className="links">
                       <li><a href={`http://wpt.live${this.props.test}`}>View Test</a></li>
                       <li><a href={makeWptFyiUrl(`results/${this.props.test}`)}>All Results</a></li>
                       <li><a href={`http://searchfox.org/mozilla-central/source/testing/web-platform/meta${testToPath(this.props.test)}.ini`}>Gecko Metadata</a></li>
+                      <li>
+                        <WptTestMetadata
+                          test={this.props.test}
+                          subtest={null}
+                          wptMetadata={this.props.wptMetadata}
+                          onChange={this.props.onMetadataChange} />
+                      </li>
                     </ul>
                     <table className="results">
                       <thead>
@@ -1151,34 +1309,132 @@ class TestDetails extends Component {
                         {resultRows}
                       </tbody>
                     </table>
+                    <GeckoMetaSummary test={this.props.test}
+                                      geckoMetadata={this.props.geckoMetadata} />
                   </section>
                 </div>);
     }
 }
 
-class MetaSummary extends Component {
+class WptTestMetadata extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            testMetadata: [],
+            addLink: false,
+            newLinkValue: null
+        };
+    }
+
+    componentDidMount() {
+        this.filterBugLinks();
+    }
+
+    onInputChange = (value) => {
+        this.setState({newLinkValue: value});
+    }
+
+    onAddLink = () => {
+        let bugUrl = `https://bugzilla.mozilla.org/show_bug.cgi?id=${this.state.newLinkValue}`;
+        this.props.onChange({test: this.props.test,
+                             subtest: this.props.subtest,
+                             change: "ADD",
+                             url: bugUrl});
+        let testMetadata = this.state.testMetadata.concat([{url: bugUrl}]);
+        this.setState({addLink: false, newLinkValue: null, testMetadata});
+    }
+
+    onRemoveLink = (url) => {
+        this.props.onChange({test: this.props.test,
+                             subtest: this.props.subtest,
+                             change: "REMOVE",
+                             url: url});
+        let testMetadata = this.state.testMetadata.filter(item => item.url !== url);
+        this.setState({testMetadata});
+    }
+
+    render() {
+        let bugLinks;
+        if (this.state.testMetadata.length) {
+            bugLinks = this.state.testMetadata.map(item => {
+                return <MetadataBugLink key={item.url}
+                                        url={item.url}
+                                        onRemove={this.onRemoveLink} />;
+            });
+        } else {
+            bugLinks = <span>None</span>;
+        }
+        let controlElements;
+        if (this.state.addLink) {
+            controlElements = (<div>
+                                 <TextInput
+                                   onChange={this.onInputChange}/>
+                                 <button onClick={this.onAddLink}>Add</button>
+                                 <button onClick={() => this.setState({addLink: false, newLinkValue: null})}>Cancel</button>
+                             </div>);
+        } else {
+            controlElements = <button onClick={() => this.setState({addLink: true})}>+</button>;
+        }
+        return (<div>
+                Gecko Bugs: {bugLinks}
+                  {controlElements}
+                </div>);
+    }
+
+    filterBugLinks() {
+        let fxMetadata = this.props.wptMetadata.get("firefox");
+        if (!fxMetadata) {
+            return;
+        }
+        let testMetadata = [];
+        for (let meta of fxMetadata) {
+            if (!bugLinkRe.exec(meta.url)) {
+                continue;
+            }
+            if (!meta.results) {
+                if (!this.props.subtest) {
+                    testMetadata.push(meta);
+                }
+            } else {
+                let relevantResults = meta.results.filter(result => (!result.subtest && !this.props.subtest) ||
+                                                          (result.subtest === this.props.subtest));
+                if (relevantResults.length) {
+                    testMetadata.push({...meta, results: relevantResults});
+                }
+            }
+        }
+        this.setState({testMetadata});
+    }
+}
+
+class MetadataBugLink extends Component {
+    render() {
+        return (<span>
+                <MaybeBugLink value={this.props.url} />
+                <button onClick={() => this.props.onRemove(this.props.url)}>-</button>
+                </span>);
+    }
+}
+
+class GeckoMetaSummary extends Component {
     render() {
         let renderBug = value => <MaybeBugLink value={value} />;
-        let items;
-        if (this.props.data) {
+        let items = [];
+        if (this.props.geckoMetadata) {
             let metaProps = [{name: "disabled", render: renderBug},
                              {name: "bug", render: renderBug},
-                             {name: "crash", title: "Crashes", render: renderBug}];
-            items = metaProps
-                .map(item => {
-                    if (this.props.data.has(item.name)) {
-                        return (<InlineOrTreeMetadata
-                                  key={item.name}
-                                  title={item.title ? item.title : capitalize(item.name)}
-                                  values={this.props.data.get(item.name)}
-                                  render={item.render}/>);
-                    }
-                    return null;
-                })
-                .filter(x => x !== null);
-        } else {
-            items = [];
-        }
+                             {name: "crash", title: "Crashes", render: renderBug},
+                             {name: "intermittent", render: value => JSON.stringify(value)}];
+            for (let prop of metaProps) {
+                if (this.props.geckoMetadata.has(prop.name)) {
+                    items.push(<InlineOrTreeMetadata
+                                 key={prop.name}
+                                 title={prop.title ? prop.title : capitalize(prop.name)}
+                                 values={this.props.geckoMetadata.get(prop.name)}
+                                 render={prop.render}/>);
+                }
+            }
+        };
         if (items.length === 0) {
             return null;
         }
@@ -1217,8 +1473,13 @@ class ResultRow extends Component {
             return <ResultCell result={result} key={run.browser_name}/>;
         });
         cells.push(<td key="metadata">
-                     <MetaSummary
-                       data={this.props.geckoMetadata} />
+                     <WptTestMetadata
+                       test={this.props.test}
+                       subtest={this.props.subtest}
+                       wptMetadata={this.props.wptMetadata}
+                       onChange={this.props.onMetadataChange} />
+                     <GeckoMetaSummary
+                       geckoMetadata={this.props.geckoMetadata} />
                    </td>);
         return (<tr>
                   <th>{this.props.subtest ? this.props.subtest : "<parent>"}</th>
@@ -1248,7 +1509,7 @@ class GeckoData extends Component {
             if (!data || !data.length) {
                 return;
             }
-            destKey = (data.length === 1 && data[0][0] == null) ? "unconditional": "conditional";
+            destKey = (data.length === 1 && (data[0] === null || data[0][0] === null)) ? "unconditional": "conditional";
             if (mapFn) {
                 data = data.map(mapFn);
             }
@@ -1379,7 +1640,6 @@ class GeckoMetadataLine extends Component {
 
 class MaybeBugLink extends Component {
     render() {
-        const bugLinkRe = /https?:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=(\d+)/;
         const bugNumberRe = /(?:bug\s+)?(\d+)/i;
         for (let re of [bugLinkRe, bugNumberRe]) {
             let match = re.exec(this.props.value);

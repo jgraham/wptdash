@@ -1,11 +1,11 @@
 self.__precacheManifest = (self.__precacheManifest || []).concat([
   {
-    "revision": "b9bfc0e42991491f41fd241be20c5308",
+    "revision": "ae36a9982d7cb36d3cd8d35300ec6c7b",
     "url": "/wptdash/index.html"
   },
   {
-    "revision": "86cd9229dd308609543a",
-    "url": "/wptdash/static/css/main.562176a1.chunk.css"
+    "revision": "201183d4e46d067bd51c",
+    "url": "/wptdash/static/css/main.5b603fcf.chunk.css"
   },
   {
     "revision": "206b3a3db6bc49605d38",
@@ -16,8 +16,8 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/wptdash/static/js/2.cdafaca4.chunk.js.LICENSE"
   },
   {
-    "revision": "86cd9229dd308609543a",
-    "url": "/wptdash/static/js/main.6b8a7f89.chunk.js"
+    "revision": "201183d4e46d067bd51c",
+    "url": "/wptdash/static/js/main.ba04e957.chunk.js"
   },
   {
     "revision": "75f740a38cabbc081555",

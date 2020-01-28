@@ -115,20 +115,28 @@ td.result-notrun {
 }
 
 
-ul.errors {
+ul.notifications {
     position: fixed;
     top: 0;
     left: 10%;
     right: 10%;
 }
 
-ul.errors > li {
+ul.notifications > li {
     opacity: 0.9;
-    background-color: #fcc;
-    border: thin solid red;
     width: 100%;
     padding: 1em 1em 1em 1em;
     margin-bottom: 1em;
+}
+
+ul.notifications > li.error {
+    background-color: #fcc;
+    border: thin solid red;
+}
+
+ul.notifications > li.info {
+    background-color: #cfc;
+    border: thin solid green;
 }
 
 .note {

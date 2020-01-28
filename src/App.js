@@ -1,10 +1,11 @@
 import React, { Component } from 'react';
 import './App.css';
-import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
+import {Filter} from './filterselector';
 import {Checkbox, TextInput, Select, SelectMultiple} from './form';
 import {MetadataEditor} from './metaeditor';
-import {Filter} from './filterselector';
+import {NotificationArea} from './notification';
 import {urlParams} from './urlparams';
+import {arraysEqual, setsEqual, reversed, iterMapSorted, enumerate} from './utils';
 
 const TASK_INDEX_BASE = "https://firefox-ci-tc.services.mozilla.com/api/index/v1";
 const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
@@ -94,11 +95,11 @@ function testToPath(test) {
     return path;
 }
 
-let makeError = (() => {
+let makeNotification = (() => {
     let id = -1;
-    return (err, options) => {
+    return (level, content, options) => {
         id++;
-        return {id, err, options};
+        return {id, level, content, options};
     };
 })();
 
@@ -115,7 +116,7 @@ class App extends Component {
             wptMetadata: null,
             geckoMetadata: {},
             pathGeckoMetadata: {},
-            errors: [],
+            notifications: [],
             haveData: {
                 bugComponent: false,
                 geckoMetadata: false,
@@ -130,18 +131,18 @@ class App extends Component {
     }
 
     onError = (err, options={}) => {
-        let error = makeError(err, options);
-        this.setState(state => {return {errors: state.errors.concat(error)};});
+        let content = err.message || "Unknown Error";
+        this.notify("error", content, options);
     }
 
-    onDismissError = (id) => {
-        let errors = Array.from(this.state.errors);
-        let idx = errors.findIndex(x => x.id === id);
+    onDismissNotification = (id) => {
+        let notifications = Array.from(this.state.notifications);
+        let idx = notifications.findIndex(x => x.id === id);
         if (idx === undefined) {
             return;
         }
-        errors.splice(idx, 1);
-        this.setState({errors});
+        notifications.splice(idx, 1);
+        this.setState({notifications});
     }
 
     onFilterChange = (filterFunc, queryTerms) => {
@@ -237,6 +238,11 @@ class App extends Component {
         // TODO: consolidate changes
         metadataPendingChanges.get(change.test).push(change);
         this.setState({metadataPendingChanges});
+    }
+
+    notify(level, content, options={}) {
+        let notification = makeNotification(level, content, options);
+        this.setState(state => {return {notifications: state.notifications.concat(notification)};});
     }
 
     async patchMetadata(data) {
@@ -534,8 +540,9 @@ class App extends Component {
         }
         return (
             <div id="app">
-              <ErrorArea errors={this.state.errors}
-                         onDismissError={this.onDismissError}/>
+              <NotificationArea
+                entries={this.state.notifications}
+                onDismissNotification={this.onDismissNotification}/>
               <header>
                 <h1>wpt interop dashboard</h1>
               </header>
@@ -545,47 +552,6 @@ class App extends Component {
     }
 }
 
-class ErrorArea extends Component {
-    onDismiss = (id) => {
-        this.props.onDismissError(id);
-    }
-
-    render() {
-        if (!this.props.errors.length) {
-            return null;
-        }
-        let errorLines = [];
-        for (let [idx, error] of enumerate(this.props.errors)) {
-            console.log(error);
-            errorLines.push(<ErrorLine
-                              key={`error-${error.id}`}
-                              error={error}
-                              onDismiss={() => this.onDismiss(idx)}/>);
-        }
-        return (<ul className="errors">
-                  {errorLines}
-                </ul>);
-    }
-}
-
-class ErrorLine extends Component {
-    render() {
-        let {id, err, options} = this.props.error;
-        let extraControls = [];
-        if (options.retry) {
-            let retry = () => {
-                this.props.onDismiss(id);
-                options.retry();
-            };
-            extraControls.push(<button onClick={retry} key="retry">Retry</button>);
-        }
-        return (<li>
-                  {err.message || "Unknown Error"}
-                  <button onClick={() => this.props.onDismiss(id)}>Close</button>
-                  {extraControls}
-                </li>);
-    }
-}
 
 class RunInfo extends Component {
     constructor(props) {

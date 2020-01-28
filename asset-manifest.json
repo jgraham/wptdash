@@ -1,14 +1,14 @@
 {
   "files": {
     "main.css": "/wptdash/static/css/main.562176a1.chunk.css",
-    "main.js": "/wptdash/static/js/main.96f34dc6.chunk.js",
-    "main.js.map": "/wptdash/static/js/main.96f34dc6.chunk.js.map",
+    "main.js": "/wptdash/static/js/main.6b8a7f89.chunk.js",
+    "main.js.map": "/wptdash/static/js/main.6b8a7f89.chunk.js.map",
     "runtime-main.js": "/wptdash/static/js/runtime-main.c57754c7.js",
     "runtime-main.js.map": "/wptdash/static/js/runtime-main.c57754c7.js.map",
     "static/js/2.cdafaca4.chunk.js": "/wptdash/static/js/2.cdafaca4.chunk.js",
     "static/js/2.cdafaca4.chunk.js.map": "/wptdash/static/js/2.cdafaca4.chunk.js.map",
     "index.html": "/wptdash/index.html",
-    "precache-manifest.278eb9a9b062b28cb21e5e4fb2b79857.js": "/wptdash/precache-manifest.278eb9a9b062b28cb21e5e4fb2b79857.js",
+    "precache-manifest.1a269be641e3d739131251f998f40785.js": "/wptdash/precache-manifest.1a269be641e3d739131251f998f40785.js",
     "service-worker.js": "/wptdash/service-worker.js",
     "static/css/main.562176a1.chunk.css.map": "/wptdash/static/css/main.562176a1.chunk.css.map",
     "static/js/2.cdafaca4.chunk.js.LICENSE": "/wptdash/static/js/2.cdafaca4.chunk.js.LICENSE"
@@ -17,6 +17,6 @@
     "static/js/runtime-main.c57754c7.js",
     "static/js/2.cdafaca4.chunk.js",
     "static/css/main.562176a1.chunk.css",
-    "static/js/main.96f34dc6.chunk.js"
+    "static/js/main.6b8a7f89.chunk.js"
   ]
 }

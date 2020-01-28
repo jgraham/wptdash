@@ -246,7 +246,7 @@ class App extends Component {
             console.error(data);
             return null;
         }
-        let url = makeWptFyiUrl("api/metadata", {"product": "firefox"}, true);
+        let url = makeWptFyiUrl("api/metadata/triage", {"product": "firefox"}, true);
         const response = await fetch(url, {
             method: 'PATCH',
             mode: 'cors',

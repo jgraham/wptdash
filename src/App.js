@@ -221,7 +221,10 @@ class App extends Component {
                 }
             }
         }
-        await this.patchMetadata(changedMeta);
+        let prUrl = await this.patchMetadata(changedMeta);
+        this.notify("info",
+                    <span>Opened PR <a href={prUrl}>{prUrl}</a></span>,
+                    {timeout: 60000});
         this.setState({metadataPendingChanges: new Map()});
     }
 
@@ -263,7 +266,7 @@ class App extends Component {
             },
             body
         });
-        return await response.json();
+        return response.text();
     }
 
     async fetchData(url, retry, options={}) {

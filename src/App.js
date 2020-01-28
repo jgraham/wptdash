@@ -10,6 +10,7 @@ const TASK_INDEX_BASE = "https://firefox-ci-tc.services.mozilla.com/api/index/v1
 const TASK_QUEUE_BASE = "https://firefox-ci-tc.services.mozilla.com/api/queue/v1";
 
 const WPT_FYI_BASE = "https://wpt.fyi";
+const WPT_FYI_STAGING_BASE = "https://staging.wpt.fyi";
 
 const passStatuses = new Set(["PASS", "OK"]);
 
@@ -23,8 +24,9 @@ const LOADING_STATE = Object.freeze({
 
 const bugLinkRe = /https?:\/\/bugzilla\.mozilla\.org\/show_bug\.cgi\?id=(\d+)/;
 
-function makeWptFyiUrl(path, params={}) {
-    let url = new URL(`${WPT_FYI_BASE}/${path}`);
+function makeWptFyiUrl(path, params={}, staging=false) {
+    let base = staging ? WPT_FYI_STAGING_BASE : WPT_FYI_BASE;
+    let url = new URL(`${base}/${path}`);
     let defaults = [["label", "master"],
                     ["product", "chrome[experimental]"],
                     ["product", "firefox[experimental]"],
@@ -244,7 +246,7 @@ class App extends Component {
             console.error(data);
             return null;
         }
-        let url = makeWptFyiUrl("api/metadata", {"product": "firefox"});
+        let url = makeWptFyiUrl("api/metadata", {"product": "firefox"}, true);
         const response = await fetch(url, {
             method: 'PATCH',
             mode: 'cors',

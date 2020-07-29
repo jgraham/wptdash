@@ -14,7 +14,7 @@
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/4.3.1/workbox-sw.js");
 
 importScripts(
-  "/wptdash/precache-manifest.f2bb9f786f7fbcd73ce62dfaf0e88da3.js"
+  "/wptdash/precache-manifest.cd53caf2e2ff6a007156d36816761287.js"
 );
 
 self.addEventListener('message', (event) => {

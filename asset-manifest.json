@@ -1,22 +1,22 @@
 {
   "files": {
-    "main.css": "/wptdash/static/css/main.5b603fcf.chunk.css",
-    "main.js": "/wptdash/static/js/main.ba04e957.chunk.js",
-    "main.js.map": "/wptdash/static/js/main.ba04e957.chunk.js.map",
+    "main.css": "/wptdash/static/css/main.7242d158.chunk.css",
+    "main.js": "/wptdash/static/js/main.c1c1b164.chunk.js",
+    "main.js.map": "/wptdash/static/js/main.c1c1b164.chunk.js.map",
     "runtime-main.js": "/wptdash/static/js/runtime-main.c57754c7.js",
     "runtime-main.js.map": "/wptdash/static/js/runtime-main.c57754c7.js.map",
     "static/js/2.cdafaca4.chunk.js": "/wptdash/static/js/2.cdafaca4.chunk.js",
     "static/js/2.cdafaca4.chunk.js.map": "/wptdash/static/js/2.cdafaca4.chunk.js.map",
     "index.html": "/wptdash/index.html",
-    "precache-manifest.f2bb9f786f7fbcd73ce62dfaf0e88da3.js": "/wptdash/precache-manifest.f2bb9f786f7fbcd73ce62dfaf0e88da3.js",
+    "precache-manifest.cd53caf2e2ff6a007156d36816761287.js": "/wptdash/precache-manifest.cd53caf2e2ff6a007156d36816761287.js",
     "service-worker.js": "/wptdash/service-worker.js",
-    "static/css/main.5b603fcf.chunk.css.map": "/wptdash/static/css/main.5b603fcf.chunk.css.map",
+    "static/css/main.7242d158.chunk.css.map": "/wptdash/static/css/main.7242d158.chunk.css.map",
     "static/js/2.cdafaca4.chunk.js.LICENSE": "/wptdash/static/js/2.cdafaca4.chunk.js.LICENSE"
   },
   "entrypoints": [
     "static/js/runtime-main.c57754c7.js",
     "static/js/2.cdafaca4.chunk.js",
-    "static/css/main.5b603fcf.chunk.css",
-    "static/js/main.ba04e957.chunk.js"
+    "static/css/main.7242d158.chunk.css",
+    "static/js/main.c1c1b164.chunk.js"
   ]
 }

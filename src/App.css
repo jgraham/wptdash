@@ -59,6 +59,10 @@ ol.tab-strip > li.tab-active {
     border-top: 2px solid orange;
 }
 
+.tree-row:target {
+    background-color: #eee;
+}
+
 .tree-row > .tree-row {
     margin-left: 2em;
 }

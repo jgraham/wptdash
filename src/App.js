@@ -158,9 +158,6 @@ class App extends Component {
                                          item.url === change.url &&
                                          item.subtest === change.subtest &&
                                          item.status === change.status);
-
-
-        console.log(this.state.metadataPendingChanges);
         let changedMeta = {};
         for (let [test, changes] of this.state.metadataPendingChanges) {
             // Flatten out the metadata
@@ -1107,7 +1104,7 @@ class TreeRow extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            showDetails: false
+            showDetails: props.expanded
         };
     }
 
@@ -1116,7 +1113,10 @@ class TreeRow extends Component {
     }
 
     render() {
-        return (<li className={"tree-row" + (this.state.showDetails ? " tree-row-expanded" : "")}>
+        return (<li
+                  className={"tree-row" + (this.state.showDetails ? " tree-row-expanded" : "")}
+                  id={this.props.rowId}
+                >
                   <span onClick={this.handleClick}>
                     {this.state.showDetails ? "\u25BC " : "\u25B6 "}
                     {this.props.rowTitle}
@@ -1136,7 +1136,9 @@ class TestItem extends Component {
         let rowTitle = `${this.props.result.test} [${this.props.result.legacy_status[0].total} subtests]`;
         return (
                 <TreeRow rowTitle={<code>{rowTitle}</code>}
-                  rowExtra={null}>
+                         rowId={this.props.result.test}
+                         expanded={window.location.hash.slice(1) === this.props.result.test}
+                         rowExtra={null}>
                   <TestDetails
                     runs={this.props.runs}
                     test={this.props.result.test}

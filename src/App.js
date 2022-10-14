@@ -156,8 +156,8 @@ class App extends Component {
     onMetadataPendingSubmit = async () => {
         let isMatch = (item, change) => (item.product === "firefox" &&
                                          item.url === change.url &&
-                                         item.subtest === change.subtest &&
-                                         item.status === change.status);
+                                         (!(item.subtest || change.subtest) || (item.subtest === change.subtest)) &&
+                                         (!(item.status || change.status) || (item.status === change.status)));
         let changedMeta = {};
         for (let [test, changes] of this.state.metadataPendingChanges) {
             // Flatten out the metadata

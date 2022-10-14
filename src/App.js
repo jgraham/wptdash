@@ -192,7 +192,6 @@ class App extends Component {
                     }
                 }
             }
-            console.log("meta", meta);
             changedMeta[test] = [];
             // Now unflatten the metadata
             let index = new Map();
@@ -209,7 +208,7 @@ class App extends Component {
                     }
                     let result = {};
                     if (newMeta.subtest) {
-                        result.subtest = {};
+                        result.subtest = newMeta.subtest;
                     }
                     if (newMeta.status) {
                         result.status = newMeta.status;
@@ -230,7 +229,6 @@ class App extends Component {
     }
 
     onMetadataChange = (change) => {
-        console.log("onMetadataChange", change);
         let metadataPendingChanges = new Map(this.state.metadataPendingChanges);
         if (!metadataPendingChanges.has(change.test)) {
             metadataPendingChanges.set(change.test, []);

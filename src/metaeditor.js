@@ -8,7 +8,7 @@ export class MetadataEditor extends Component {
         let loginUrl = `https://staging.wpt.fyi/login`;
         return (<section id="metadata">
                   <h3>Metadata Changes</h3>
-                  <p>Submitting MetaData requires first signing in to <a href={loginUrl} target="_blank">staging.wpt.fyi</a></p>
+                  <p>Submitting MetaData requires first signing in to <a href={loginUrl} target="_blank" rel="noopener noreferrer">staging.wpt.fyi</a></p>
                   <MetadataPendingChanges
                     changes={this.props.changes}
                     onSubmit={this.props.onSubmit}

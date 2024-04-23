@@ -15,7 +15,7 @@ const WPT_FYI_STAGING_BASE = "https://staging.wpt.fyi";
 
 const passStatuses = new Set(["PASS", "OK"]);
 
-const browsers = ["chrome", "firefox", "safari"];
+const browsers = ["chrome", "firefox", "safari", "firefox_android"];
 
 const LOADING_STATE = Object.freeze({
     NONE: 0,
@@ -31,7 +31,8 @@ function makeWptFyiUrl(path, params={}, staging=false) {
     let defaults = [["label", "master"],
                     ["product", "chrome[experimental]"],
                     ["product", "firefox[experimental]"],
-                    ["product", "safari[experimental]"]];
+                    ["product", "safari[experimental]"],
+                    ["product", "firefox_android[experimental]"]];
     params = new Map(Object.entries(params));
     for (let [key, value] of defaults) {
         if (!params.has(key)) {
@@ -1054,7 +1055,7 @@ but not in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
             } else if (this.props.passesIn.length) {
                 text = `Tests that pass in ${this.joinList(this.props.passesIn.map(x => capitalize(x)))}`;
             } else {
-                text = `Tests that don't pass in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
+                text = `Tests that don\'t pass in ${this.joinList(this.props.failsIn.map(x => capitalize(x)))}`;
             }
             return (<p>
                       {text}

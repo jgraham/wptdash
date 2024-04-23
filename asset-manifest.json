@@ -1,22 +1,13 @@
 {
   "files": {
-    "main.css": "/wptdash/static/css/main.7242d158.chunk.css",
-    "main.js": "/wptdash/static/js/main.dc8a41b3.chunk.js",
-    "main.js.map": "/wptdash/static/js/main.dc8a41b3.chunk.js.map",
-    "runtime-main.js": "/wptdash/static/js/runtime-main.c57754c7.js",
-    "runtime-main.js.map": "/wptdash/static/js/runtime-main.c57754c7.js.map",
-    "static/js/2.cdafaca4.chunk.js": "/wptdash/static/js/2.cdafaca4.chunk.js",
-    "static/js/2.cdafaca4.chunk.js.map": "/wptdash/static/js/2.cdafaca4.chunk.js.map",
+    "main.css": "/wptdash/static/css/main.bcb9b6b3.css",
+    "main.js": "/wptdash/static/js/main.103275df.js",
     "index.html": "/wptdash/index.html",
-    "precache-manifest.f5489426a1cf7438c0f193d517a4d4bc.js": "/wptdash/precache-manifest.f5489426a1cf7438c0f193d517a4d4bc.js",
-    "service-worker.js": "/wptdash/service-worker.js",
-    "static/css/main.7242d158.chunk.css.map": "/wptdash/static/css/main.7242d158.chunk.css.map",
-    "static/js/2.cdafaca4.chunk.js.LICENSE": "/wptdash/static/js/2.cdafaca4.chunk.js.LICENSE"
+    "main.bcb9b6b3.css.map": "/wptdash/static/css/main.bcb9b6b3.css.map",
+    "main.103275df.js.map": "/wptdash/static/js/main.103275df.js.map"
   },
   "entrypoints": [
-    "static/js/runtime-main.c57754c7.js",
-    "static/js/2.cdafaca4.chunk.js",
-    "static/css/main.7242d158.chunk.css",
-    "static/js/main.dc8a41b3.chunk.js"
+    "static/css/main.bcb9b6b3.css",
+    "static/js/main.103275df.js"
   ]
 }
